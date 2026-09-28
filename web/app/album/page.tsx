@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlbumMap } from "@/components/album/AlbumMap";
 import { Legend, PhotoGrid } from "@/components/album/PhotoGrid";
 import { PhotoDetailView } from "@/components/album/PhotoDetailView";
+import { SavePlace } from "@/components/album/SavePlace";
 import { StreetMatchPanel } from "@/components/album/StreetMatchPanel";
 import { SkylinePanel } from "@/components/SkylinePanel";
 import { Button } from "@/components/ui/button";
@@ -310,6 +311,12 @@ export default function Album() {
             />
           ) : (
             <div className="flex flex-col gap-4">
+              <SavePlace
+                onSaved={async (id) => {
+                  await refresh();
+                  open(id);
+                }}
+              />
               <Uploader onFiles={addFiles} upload={upload} onDismiss={() => setUpload(null)} />
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex gap-1 rounded-lg bg-muted p-1 text-sm">

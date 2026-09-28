@@ -123,9 +123,9 @@ export const archive = {
   streetMatch: (id: string, bbox: [number, number, number, number]) => call(`photos/${id}/streetmatch`, StreetJob, jsonInit("POST", { bbox })),
   streetJob: (jobId: string) => call(`streetmatch/${jobId}`, StreetJob),
 
-  /** Shrink on the device (≤ 2048 px) and send GPS read from the original alongside. */
-  async upload(file: File): Promise<{ added: string[]; skipped: string[] }> {
-    const gps = await readGps(file);
+  /** Shrink on the device (≤ 2048 px) and send GPS read from the original (or the phone's live position) alongside. */
+  async upload(file: File, here?: { latitude: number; longitude: number }): Promise<{ added: string[]; skipped: string[] }> {
+    const gps = here ? { ...here, capturedAt: new Date().toISOString() } : await readGps(file);
     const small = await downscale(file, 2048);
     const form = new FormData();
     form.append("files", small?.blob ?? file, file.name);

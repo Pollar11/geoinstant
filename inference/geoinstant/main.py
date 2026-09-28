@@ -19,6 +19,7 @@ from .archive.api import router as archive_router
 from .archive.service import ArchiveService
 from .archive.store import ArchiveStore
 from .config import Settings, get_settings
+from .geocode import Nominatim
 from .imageio import ImageError, decode
 from .models.embedder import Embedder, OnnxImageEncoder
 from .models.investigator import Investigation
@@ -74,6 +75,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             app.state.skyline if settings.archive_auto_search else None,
             settings.auto_street_km2,
             settings.auto_skyline_km,
+            Nominatim(settings.geocode_url, settings.geocode_user_agent) if settings.geocode_url else None,
         )
         app.state.archive.start()
     log.info("GeoInstant ready (mode=%s) %s", app.state.engine.mode, app.state.engine.models)

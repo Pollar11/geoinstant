@@ -76,6 +76,14 @@ Select photos from the same trip and click **Link as same place/event**; once on
 ARCHIVE_PASSWORD=… ANTHROPIC_API_KEY=… docker compose up --build   # http://localhost:3300/album
 ```
 
+## Save this place (new photos)
+
+At a place you'll want to remember, open `/album` on your phone and tap **Save this place**:
+1. Take the photo. The phone's GPS is saved with it, usually to within about 10 m.
+2. Add a note, e.g. "Aunt Mary's wedding, Lake Como".
+
+The photo is pinned exactly, with its street address, so nobody has to search for it later. Photos whose file still has GPS are pinned the same way when uploaded.
+
 ## Automatic exact search (album)
 
 Every album photo goes through this automatically. You don't need to zoom the map.
