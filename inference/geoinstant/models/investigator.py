@@ -20,6 +20,7 @@ import httpx
 from PIL import Image
 from pydantic import BaseModel, Field, ValidationError
 
+from .research import Research
 from .reverse_image import ReverseImage
 
 log = logging.getLogger(__name__)
@@ -35,12 +36,17 @@ coastline, sun/shadows, vehicles, era.
 3. Use `web_search` to research what you read (business names, slogans, phone numbers, landmarks, \
 products and where they were sold) and to verify candidate places.
 4. Use `geocode` to get coordinates for a named place or address, and `reverse_geocode` to check a spot.
-5. Interiors and scenes without readable names (when `reverse_image_search` is available): search the whole \
+5. Research candidates like a pro (when the tools are available): once the clues narrow it to a region, \
+list the candidates with `find_places` (OpenStreetMap tags for the distinctive feature: a water slide, a \
+lighthouse, a church, a pier, a hotel), then check each promising one with `view_satellite` (pool and \
+building shapes, roads, coastline) and `street_photos` (the view from the ground). Several independent \
+details must match before you claim a spot; if none matches, report the region and list what you checked.
+6. Interiors and scenes without readable names (when `reverse_image_search` is available): search the whole \
 photo, then distinctive details (a lamp, tiles, wallpaper, a mural, a bar counter). Cafés, hotels, bars and \
 restaurants have interior photos on maps, review and booking sites. Open promising pages with `web_fetch` and \
 look at candidate photos with `view_image`; claim a venue only when several distinctive details match.
-6. Narrate briefly between steps (one or two sentences), like a pro explaining a round.
-7. Finish by calling `report_location` exactly once.
+7. Narrate briefly between steps (one or two sentences), like a pro explaining a round.
+8. Finish by calling `report_location` exactly once.
 
 Rules:
 - Never identify people, and never use faces or bodies as evidence. Do not run `reverse_image_search` \
@@ -217,12 +223,14 @@ class Investigator:
         effort: str,
         geocode_url: str,
         user_agent: str,
-        max_steps: int = 18,
-        max_searches: int = 6,
-        budget_s: float = 180.0,
+        max_steps: int = 26,
+        max_searches: int = 8,
+        budget_s: float = 260.0,  # the web route allows 300 s
         reverse: ReverseImage | None = None,
+        research: Research | None = None,
     ) -> None:
         self.reverse = reverse
+        self.research = research
         self.client = client
         self.model = model
         self.effort = effort
@@ -296,7 +304,52 @@ class Investigator:
             return content, Step(
                 kind="view", text=f"Compared with {urlparse(url).hostname or 'a photo'}: {args.get('why') or ''}".strip()
             )
+        if name in ("find_places", "view_satellite", "street_photos") and self.research is not None:
+            return await self._research_tool(name, args)
         return [{"type": "text", "text": f"Unknown tool {name}"}], Step(kind="error", text=f"Unknown tool {name}")
+
+    async def _research_tool(self, name: str, args: dict[str, Any]) -> tuple[list[dict[str, Any]], Step]:
+        rs = self.research
+        assert rs is not None
+        why = str(args.get("why") or "").strip()
+        if name == "find_places":
+            tags = [str(t) for t in args.get("tags") or []]
+            raw = args.get("bbox")
+            if isinstance(raw, list) and len(raw) == 4:
+                bbox = (float(raw[0]), float(raw[1]), float(raw[2]), float(raw[3]))
+                where = "the area"
+            else:
+                where = str(args.get("area") or "")[:120]
+                hits = await self._nominatim("search", {"q": where, "limit": 1})
+                if not hits:
+                    return [{"type": "text", "text": f"Area not found: {where}"}], Step(
+                        kind="error", text=f"Area not found: {where}"
+                    )
+                s, n, w, e = (float(x) for x in hits[0]["boundingbox"])
+                bbox = (s, w, n, e)
+            found = await rs.find_places(bbox, tags, str(args["name"]) if args.get("name") else None)
+            return [{"type": "text", "text": json.dumps(found, ensure_ascii=False) if found else "No matches."}], Step(
+                kind="geocode", text=f"Listed {', '.join(tags)} in {where}: {len(found)} candidates"
+            )
+        lat, lon = float(args["latitude"]), float(args["longitude"])
+        if name == "view_satellite":
+            img = await rs.satellite(lat, lon, int(args.get("zoom") or 18))
+            aerial = [{"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": _jpeg_b64(img, 1024)}}]
+            return aerial, Step(kind="view", text=f"Satellite view of {lat:.5f}, {lon:.5f}" + (f": {why}" if why else ""))
+        shots = await rs.street_photos(lat, lon, float(args.get("radius_m") or 120))
+        if not shots:
+            return [{"type": "text", "text": "No street-level photos near this spot."}], Step(
+                kind="view", text=f"No street photos near {lat:.5f}, {lon:.5f}"
+            )
+        content: list[dict[str, Any]] = []
+        for meta, img in shots:
+            content.append({"type": "text", "text": json.dumps(meta)})
+            content.append(
+                {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": _jpeg_b64(img, 1024)}}
+            )
+        return content, Step(
+            kind="view", text=f"Street photos at {lat:.5f}, {lon:.5f} ({len(shots)})" + (f": {why}" if why else "")
+        )
 
     # ---- loop -------------------------------------------------------------------------------
     async def run(
@@ -319,6 +372,7 @@ class Investigator:
         tools = [
             *CLIENT_TOOLS,
             *(REVERSE_TOOLS if self.reverse else []),
+            *(self.research.tools() if self.research else []),
             {"type": "web_search_20260209", "name": "web_search", "max_uses": self.max_searches},
             {"type": "web_fetch_20260209", "name": "web_fetch", "max_uses": 4},
         ]
@@ -403,7 +457,14 @@ class Investigator:
 
 
 def load_investigator(
-    mode: str, model: str, effort: str, api_key: str | None, geocode_url: str, user_agent: str, vision_key: str = ""
+    mode: str,
+    model: str,
+    effort: str,
+    api_key: str | None,
+    geocode_url: str,
+    user_agent: str,
+    vision_key: str = "",
+    research: Research | None = None,
 ) -> Investigator | None:
     if mode == "off":
         return None
@@ -414,4 +475,12 @@ def load_investigator(
     except Exception:  # noqa: BLE001
         log.warning("Investigator disabled: could not create the Anthropic client")
         return None
-    return Investigator(client, model, effort, geocode_url, user_agent, reverse=ReverseImage(vision_key) if vision_key else None)
+    return Investigator(
+        client,
+        model,
+        effort,
+        geocode_url,
+        user_agent,
+        reverse=ReverseImage(vision_key) if vision_key else None,
+        research=research,
+    )

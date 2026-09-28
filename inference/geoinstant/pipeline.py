@@ -29,6 +29,7 @@ from .models.detector import NullDetector, load_detector
 from .models.embedder import HashEmbedder, load_embedder
 from .models.investigator import load_investigator
 from .models.ocr import NullOcr, load_ocr
+from .models.research import Research
 from .models.vlm import VlmResult, load_vlm
 from .runtime import TtlLru, coarsen, people_are_main_subject
 from .schemas import (
@@ -80,6 +81,7 @@ class Engine:
             s.geocode_url,
             s.geocode_user_agent,
             s.google_vision_key,
+            Research(s.overpass_url, s.mapillary_token, s.satellite_url_template),
         )
         self.cues = CueKnowledgeBase(s.cue_priors, countries)
         self.results: TtlLru[LocateResult] = TtlLru(s.result_cache_size, s.result_cache_ttl_s)
