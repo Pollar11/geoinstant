@@ -135,3 +135,36 @@ class Health(BaseModel):
     models: dict[str, str]
     cells: int
     index_rows: int
+
+
+# ---- Skyline (mountain) matching ---------------------------------------------------------------
+class SkylineCandidate(BaseModel):
+    latitude: float
+    longitude: float
+    elevation_m: float
+    azimuth_deg: float = Field(description="Direction the camera faced, degrees from north")
+    fov_deg: float = Field(description="Estimated horizontal field of view")
+    fit_error: float = Field(description="Skyline mismatch relative to its own spread (0 = perfect)")
+    match: float = Field(ge=0, le=1, description="Fit relative to the best candidate")
+    place: Place
+
+
+class SkylineResult(BaseModel):
+    status: Literal["ok", "too_flat", "no_area", "area_too_large", "no_data"]
+    message: str = ""
+    confidence: float = Field(ge=0, le=100, description="How clearly the best candidate beats the others")
+    profile: list[tuple[float, float, float]] = Field(description="Skyline used: (x, y, weight), normalised image coords")
+    traced: bool
+    relief_deg: float
+    search_area: tuple[float, float, float, float] | None = Field(description="south, west, north, east")
+    viewpoints: int = 0
+    spacing_km: float = 0.0
+    candidates: list[SkylineCandidate] = []
+    heat: list[tuple[float, float, float]] = Field(default=[], description="(lat, lon, score) of searched viewpoints")
+    timings_ms: dict[str, float] = {}
+
+
+class SkylineCoverage(BaseModel):
+    regions: list[tuple[float, float, float, float]]
+    on_demand: bool
+    max_area_km2: float

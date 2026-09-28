@@ -22,6 +22,20 @@ log p(c) = [log prior(c) + Σ wᵢ ℓᵢ(c)] / T
 - **Coordinate:** mean-shift over retrieved photos, VLM point and cue regions. The radius is the 68th-percentile spread.
 - **Honesty:** one distinctive cue (e.g. a Joshua tree) gives a confident *region*, not a street. Street level needs retrieval, readable text or GPS.
 
+## Skyline matching
+
+```
+photo → ridge line (auto or hand-traced) → elevation angles per lens guess (30–75°)
+terrain (SRTM 30 m) → 360° skyline from every viewpoint on a 0.5 km grid (terrain < 0.5 km ignored)
+FFT match over direction × lens → top 5 → refine on a finer grid → position, direction, lens
+```
+
+- **Confidence:** how clearly the best match beats the runner-up. Near-ties mean the skyline is ambiguous.
+- **Test on real Alps terrain, 24 random views, 500 km² area:**
+  - 50% of views were found within 1 km.
+  - Every search reporting ≥ 50% confidence was correct (8 of 8).
+- **Limits:** the ridge must be distant (> 0.5 km) and distinctive, and you need a rough search area.
+
 ## Models
 
 | Stage | Default | Licence |

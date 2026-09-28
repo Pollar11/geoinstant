@@ -106,3 +106,33 @@ export const FeedbackResponse = z.object({
   stored_image: z.boolean(),
   stored_embedding: z.boolean(),
 });
+
+export const SkylineCandidate = z.object({
+  latitude: z.number(),
+  longitude: z.number(),
+  elevation_m: z.number(),
+  azimuth_deg: z.number(),
+  fov_deg: z.number(),
+  fit_error: z.number(),
+  match: z.number(),
+  place: Place,
+});
+export type SkylineCandidate = z.infer<typeof SkylineCandidate>;
+
+export type BBox = [number, number, number, number]; // south, west, north, east
+
+export const SkylineResult = z.object({
+  status: z.enum(["ok", "too_flat", "no_area", "area_too_large", "no_data"]),
+  message: z.string(),
+  confidence: z.number(),
+  profile: z.array(z.tuple([z.number(), z.number(), z.number()])),
+  traced: z.boolean(),
+  relief_deg: z.number(),
+  search_area: z.tuple([z.number(), z.number(), z.number(), z.number()]).nullable(),
+  viewpoints: z.number(),
+  spacing_km: z.number(),
+  candidates: z.array(SkylineCandidate),
+  heat: z.array(z.tuple([z.number(), z.number(), z.number()])),
+  timings_ms: z.record(z.string(), z.number()),
+});
+export type SkylineResult = z.infer<typeof SkylineResult>;

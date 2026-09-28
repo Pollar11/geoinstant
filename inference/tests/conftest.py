@@ -85,5 +85,6 @@ def settings(artifacts: Path, tmp_path: Path) -> Settings:
         feedback_dir=tmp_path / "feedback",
         rate_limit_per_minute=600,
         rate_limit_burst=100,
-        fast_deadline_ms=5000,  # CI machines are slow; the latency budget is tested separately
+        fast_deadline_ms=5000,
+        dem_tile_url="",  # tests never download elevation tiles  # CI machines are slow; the latency budget is tested separately
     )

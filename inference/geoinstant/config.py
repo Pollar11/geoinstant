@@ -70,6 +70,13 @@ class Settings(BaseSettings):
     trusted_proxy_hops: int = 1  # how many X-Forwarded-For hops to trust
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3300"])
 
+    # --- Skyline (mountain) matching ----------------------------------------------------
+    skyline_dir: str = "skyline"  # prebuilt region indexes (scripts/build_skyline_index.py) + on-demand cache
+    dem_dir: str = "dem"  # SRTM .hgt tiles
+    dem_tile_url: str = "https://s3.amazonaws.com/elevation-tiles-prod/skadi/{ns}/{name}.hgt.gz"  # "" = offline
+    skyline_max_area_km2: float = 5000.0  # on-demand search area limit
+    skyline_max_km: float = 40.0  # how far to render terrain
+
     # --- Feedback / continuous learning ----------------------------------------------------
     feedback_dir: Path = Path("./feedback")
     result_cache_size: int = 2048

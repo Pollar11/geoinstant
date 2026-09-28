@@ -116,3 +116,32 @@ def test_proxy_key_limits_per_end_user(settings: Settings) -> None:
         # A different end user behind the same proxy has their own bucket.
         assert c.get("/v1/reverse", params={"lat": 1, "lon": 1}, headers={**h, "X-Forwarded-For": "2.2.2.2"}).status_code == 200
         assert c.get("/v1/reverse", params={"lat": 1, "lon": 1}).status_code == 401
+
+
+def test_skyline_endpoint(settings: Settings, tmp_path: Path) -> None:
+    from PIL import Image
+
+    from geoinstant.skyline.horizon import panorama
+
+    from .test_skyline import DEM, TRUE, photo_profile, write_tile
+
+    write_tile(settings.artifacts_dir / "dem")
+    s = settings.model_copy(update={"skyline_max_km": 25.0})
+    prof = photo_profile(panorama(DEM, *TRUE, max_km=25), az=130.0, fov=46.0)
+    trace = [[float(x), float(y)] for x, y in zip(prof.x[::16], prof.y[::16], strict=True)]
+    buf = __import__("io").BytesIO()
+    Image.new("RGB", (600, 400), (120, 140, 160)).save(buf, "JPEG")
+    with client(s) as c:
+        assert c.get("/v1/skyline/coverage").json()["on_demand"] is True
+        r = c.post(
+            "/v1/skyline",
+            files={"image": ("m.jpg", buf.getvalue(), "image/jpeg")},
+            data={"trace": json.dumps(trace), "bbox": json.dumps([46.70, 7.60, 46.86, 7.82])},
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["status"] == "ok" and body["traced"] is True
+        best = body["candidates"][0]
+        assert abs(best["latitude"] - TRUE[0]) < 0.01 and abs(best["longitude"] - TRUE[1]) < 0.015
+        bad = c.post("/v1/skyline", files={"image": ("m.jpg", buf.getvalue(), "image/jpeg")}, data={"bbox": "[1,2]"})
+        assert bad.status_code == 422

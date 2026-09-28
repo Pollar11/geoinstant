@@ -1,5 +1,5 @@
 /** Browser-side API calls (all go through this app's /api routes, never to the inference host). */
-import { FeedbackResponse, LocateEvent, LocateResult, Place, type FeedbackRequest } from "./api-types";
+import { FeedbackResponse, LocateEvent, LocateResult, Place, SkylineResult, type BBox, type FeedbackRequest } from "./api-types";
 import { readSse } from "./sse";
 
 export class ApiError extends Error {
@@ -81,4 +81,14 @@ export function gpsResult(latitude: number, longitude: number, place: Place, cap
     privacy: { coarsened: false, reason: null, stored: false },
     cached: false,
   };
+}
+
+export async function skylineSearch(image: Blob, bbox: BBox, trace: [number, number][] | null, signal?: AbortSignal) {
+  const form = new FormData();
+  form.append("image", image, "photo.jpg");
+  form.append("bbox", JSON.stringify(bbox));
+  if (trace && trace.length >= 3) form.append("trace", JSON.stringify(trace));
+  const res = await fetch("/api/skyline", { method: "POST", body: form, signal });
+  if (!res.ok) throw await errorFrom(res);
+  return SkylineResult.parse(await res.json());
 }

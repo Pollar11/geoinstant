@@ -2,7 +2,7 @@
 
 Upload a photo and get its likely location: lat/lon, place name, confidence, uncertainty radius and the evidence used.
 
-- **inference/**: FastAPI pipeline (EXIF → cues + OCR + retrieval + geocell classifier → fusion → optional Claude refinement)
+- **inference/**: FastAPI pipeline (EXIF → cues + OCR + retrieval + geocell classifier → fusion → optional Claude refinement) and mountain skyline matching
 - **web/**: Next.js 15 app (upload, live progress, map, feedback, PWA)
 - **docs/**: [DESIGN.md](docs/DESIGN.md) · [API.md](docs/API.md)
 
@@ -33,6 +33,20 @@ python scripts/build_cells.py --coords coords.csv
 python scripts/build_prototypes.py
 python scripts/build_index.py --manifest train.csv --faiss
 python scripts/evaluate.py --manifest test.csv
+```
+
+## Mountain skyline matching
+
+For photos with mountains in the background:
+
+1. Zoom the map to the suspected area (≤ 5,000 km²).
+2. Optionally trace the ridge on the photo.
+3. Click **Search map area**.
+
+It returns camera position, facing direction and lens, found by matching the ridge against SRTM terrain. The first search in an area downloads terrain and takes about 15 s; later searches take about 1–3 s. Prebuild large regions for instant search:
+
+```bash
+python scripts/build_skyline_index.py --name alps --bbox 45.8 5.9 47.9 10.5
 ```
 
 ## Privacy

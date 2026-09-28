@@ -1,7 +1,8 @@
-"""HTTP API: /v1/locate, /v1/locate/stream, /v1/reverse, /v1/feedback, /healthz."""
+"""HTTP API: /v1/locate, /v1/locate/stream, /v1/skyline, /v1/reverse, /v1/feedback, /healthz."""
 
 from __future__ import annotations
 
+import asyncio
 import hmac
 import json
 import logging
@@ -15,9 +16,23 @@ from starlette.datastructures import UploadFile
 from starlette.formparsers import MultiPartParser
 
 from .config import Settings, get_settings
+from .imageio import ImageError, decode
 from .pipeline import Engine
 from .runtime import FeedbackStore, TokenBucket
-from .schemas import ErrorEvent, FeedbackRequest, FeedbackResponse, Health, LocateResult, Place, ResultEvent
+from .schemas import (
+    ErrorEvent,
+    FeedbackRequest,
+    FeedbackResponse,
+    Health,
+    LocateResult,
+    Place,
+    ResultEvent,
+    SkylineCandidate,
+    SkylineCoverage,
+    SkylineResult,
+)
+from .skyline.extract import detect, from_trace
+from .skyline.service import SkylineService
 
 log = logging.getLogger("geoinstant")
 
@@ -28,6 +43,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.engine = Engine(settings)
     app.state.limiter = TokenBucket(settings.rate_limit_per_minute, settings.rate_limit_burst)
     app.state.feedback = FeedbackStore(settings.feedback_dir)
+    app.state.skyline = SkylineService(
+        settings.artifact(settings.skyline_dir),
+        settings.artifact(settings.dem_dir),
+        settings.dem_tile_url,
+        settings.skyline_max_area_km2,
+        settings.skyline_max_km,
+    )
     log.info("GeoInstant ready (mode=%s) %s", app.state.engine.mode, app.state.engine.models)
     yield
     app.state.engine.pool.shutdown(wait=False, cancel_futures=True)
@@ -64,14 +86,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         ip = forwarded_ip(request, settings.trusted_proxy_hops)
         return f"ip:{ip or (request.client.host if request.client else 'unknown')}"
 
-    def guard(request: Request) -> None:
+    def check(request: Request, cost: float) -> None:
         if settings.api_keys or settings.proxy_api_keys:
             supplied = request.headers.get("x-api-key", "")
             if not matches(supplied, settings.api_keys + settings.proxy_api_keys):
                 raise HTTPException(401, "Missing or invalid API key")
-        wait = request.app.state.limiter.take(client_id(request))
+        wait = request.app.state.limiter.take(client_id(request), cost)
         if wait > 0:
             raise HTTPException(429, "Rate limit exceeded", headers={"Retry-After": str(int(wait) + 1)})
+
+    def guard(request: Request) -> None:
+        check(request, 1.0)
 
     async def read_image(request: Request) -> bytes:
         declared = int(request.headers.get("content-length") or 0)
@@ -146,7 +171,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         lon: float = Query(ge=-180, le=180),
     ) -> Place:
         """Name a coordinate. Lets clients that read EXIF GPS on-device skip uploading the photo."""
-        engine: Engine = request.app.state.engine
+        return place_of(request.app.state.engine, lat, lon)
+
+    def place_of(engine: Engine, lat: float, lon: float) -> Place:
         pl = engine.gazetteer.reverse(lat, lon)
         return Place(
             name=pl.name,
@@ -157,6 +184,89 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             display_name=pl.display_name,
             distance_km=round(pl.distance_km, 2),
         )
+
+    def parse_floats(raw: object, n: int | None, what: str) -> list[float] | None:
+        if raw is None or raw == "":
+            return None
+        try:
+            v = json.loads(str(raw))
+            flat = [float(x) for x in (v if n is None else v[:n])]
+        except (ValueError, TypeError) as e:
+            raise HTTPException(422, f"Invalid {what}") from e
+        if n is not None and len(flat) != n:
+            raise HTTPException(422, f"Invalid {what}")
+        return flat
+
+    @app.post("/v1/skyline", response_model=SkylineResult)
+    async def skyline(request: Request) -> SkylineResult:
+        """Match the mountain skyline. Multipart: image, optional trace=[[x,y],...], bbox=[s,w,n,e]."""
+        check(request, 3.0)  # skyline searches are expensive
+        form = await request.form(max_files=1, max_fields=4)
+        f = form.get("image")
+        if not isinstance(f, UploadFile):
+            raise HTTPException(400, "Expected a multipart field named 'image'")
+        data = await f.read()
+        if len(data) > settings.max_upload_bytes:
+            raise HTTPException(413, "Image is too large")
+        bbox_v = parse_floats(form.get("bbox"), 4, "bbox")
+        trace_raw = form.get("trace")
+        trace: list[tuple[float, float]] | None = None
+        if trace_raw:
+            try:
+                trace = [(float(p[0]), float(p[1])) for p in json.loads(str(trace_raw))]
+            except (ValueError, TypeError, IndexError) as e:
+                raise HTTPException(422, "Invalid trace") from e
+            if len(trace) < 3:
+                raise HTTPException(422, "Trace needs at least 3 points")
+        engine: Engine = request.app.state.engine
+        svc: SkylineService = request.app.state.skyline
+
+        def work() -> SkylineResult:
+            try:
+                img = decode(data, 1024, settings.max_pixels).image
+            except ImageError as e:
+                raise HTTPException(e.status, str(e)) from e
+            aspect = img.width / img.height
+            prof = from_trace(trace, aspect) if trace else detect(img)
+            bbox = (bbox_v[0], bbox_v[1], bbox_v[2], bbox_v[3]) if bbox_v else None
+            r = svc.search(prof, bbox)
+            step = max(1, len(prof.x) // 80)
+            return SkylineResult(
+                status=r.status,
+                message=r.message,
+                confidence=round(100 * r.confidence, 1),
+                profile=[
+                    (round(float(x), 4), round(float(y), 4), round(float(w), 2))
+                    for x, y, w in zip(prof.x[::step], prof.y[::step], prof.w[::step], strict=True)
+                ],
+                traced=prof.traced,
+                relief_deg=round(r.relief, 2),
+                search_area=r.bbox,
+                viewpoints=r.viewpoints,
+                spacing_km=round(r.spacing_km, 3),
+                candidates=[
+                    SkylineCandidate(
+                        latitude=round(c.lat, 6),
+                        longitude=round(c.lon, 6),
+                        elevation_m=round(c.elev, 1),
+                        azimuth_deg=round(c.m.azimuth, 1),
+                        fov_deg=c.m.fov,
+                        fit_error=round(c.m.rmse, 4),
+                        match=round(c.m.score, 3),
+                        place=place_of(engine, c.lat, c.lon),
+                    )
+                    for c in r.candidates
+                ],
+                heat=r.heat,
+                timings_ms=r.timings,
+            )
+
+        return await asyncio.get_running_loop().run_in_executor(engine.pool, work)
+
+    @app.get("/v1/skyline/coverage", response_model=SkylineCoverage)
+    async def skyline_coverage(request: Request) -> SkylineCoverage:
+        svc: SkylineService = request.app.state.skyline
+        return SkylineCoverage(regions=svc.coverage, on_demand=svc.dem_available, max_area_km2=svc.max_area)
 
     @app.get("/healthz", response_model=Health)
     async def healthz(request: Request) -> Health:

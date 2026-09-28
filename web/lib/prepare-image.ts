@@ -6,7 +6,7 @@ export const ACCEPT = "image/jpeg,image/png,image/webp,image/heic,image/heif,.he
 export const MAX_BYTES = 25 * 1024 * 1024;
 
 export type PreparedImage =
-  | { kind: "gps"; latitude: number; longitude: number; capturedAt: string | null; previewUrl: string }
+  | { kind: "gps"; latitude: number; longitude: number; capturedAt: string | null; previewUrl: string; blob: Blob }
   | { kind: "upload"; blob: Blob; contentType: string; previewUrl: string; width: number; height: number };
 
 export class PrepareError extends Error {}
@@ -62,7 +62,7 @@ export async function prepareImage(file: File): Promise<PreparedImage> {
   const gps = await readGps(file);
   const small = await downscale(file);
   const previewUrl = URL.createObjectURL(small?.blob ?? file);
-  if (gps) return { kind: "gps", ...gps, previewUrl };
+  if (gps) return { kind: "gps", ...gps, previewUrl, blob: small?.blob ?? file };
   if (small) return { kind: "upload", contentType: "image/jpeg", previewUrl, ...small };
   return { kind: "upload", blob: file, contentType: file.type || "application/octet-stream", previewUrl, width: 0, height: 0 };
 }

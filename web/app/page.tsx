@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertTriangle, RotateCcw } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Dropzone } from "@/components/Dropzone";
 import { FeedbackPanel } from "@/components/FeedbackPanel";
@@ -9,9 +9,11 @@ import { LocationMap } from "@/components/LocationMap";
 import { PhotoWithRegions } from "@/components/PhotoWithRegions";
 import { PipelineTimeline } from "@/components/PipelineTimeline";
 import { ResultPanel, ResultSkeleton } from "@/components/ResultPanel";
+import { SkylinePanel } from "@/components/SkylinePanel";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { sendFeedback } from "@/lib/client";
+import type { BBox, SkylineResult } from "@/lib/api-types";
+import { sendFeedback, skylineSearch } from "@/lib/client";
 import { useLocate } from "@/lib/use-locate";
 
 export default function Home() {
@@ -20,15 +22,56 @@ export default function Home() {
   const [correction, setCorrection] = useState<[number, number] | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
+  // Skyline (mountain) matching
+  const [bounds, setBounds] = useState<BBox | null>(null);
+  const [tracing, setTracing] = useState(false);
+  const [trace, setTrace] = useState<[number, number][]>([]);
+  const [sky, setSky] = useState<SkylineResult | null>(null);
+  const [skyBusy, setSkyBusy] = useState(false);
+  const [skyError, setSkyError] = useState<string | null>(null);
+  const [selected, setSelected] = useState(0);
+
   const start = useCallback(
     (f: File) => {
       setCorrecting(false);
       setCorrection(null);
       setNotice(null);
+      setTracing(false);
+      setTrace([]);
+      setSky(null);
+      setSkyError(null);
       void run(f);
     },
     [run],
   );
+
+  const views = useMemo(
+    () => (sky?.candidates ?? []).map((c) => ({ latitude: c.latitude, longitude: c.longitude, azimuth: c.azimuth_deg, fov: c.fov_deg })),
+    [sky],
+  );
+  const skylineLine = useMemo(() => sky?.profile.filter((p) => p[2] > 0).map((p) => [p[0], p[1]] as [number, number]), [sky]);
+  const startOver = useCallback(() => {
+    setTracing(false);
+    setTrace([]);
+    setSky(null);
+    setSkyError(null);
+    reset();
+  }, [reset]);
+
+  const searchSkyline = useCallback(async () => {
+    if (!image || !bounds) return;
+    setSkyBusy(true);
+    setSkyError(null);
+    setTracing(false);
+    try {
+      setSky(await skylineSearch(image.blob, bounds, trace.length >= 3 ? trace : null));
+      setSelected(0);
+    } catch (e) {
+      setSkyError(e instanceof Error ? e.message : "Skyline search failed");
+    } finally {
+      setSkyBusy(false);
+    }
+  }, [image, bounds, trace]);
 
   // Android share sheet → service worker stashed the photo (see public/sw.js).
   useEffect(() => {
@@ -83,7 +126,7 @@ export default function Home() {
         {!idle && (
           <div className="flex shrink-0 gap-1 sm:gap-2">
             <Dropzone onFile={start} compact />
-            <Button variant="ghost" size="icon" aria-label="Start over" onClick={reset}>
+            <Button variant="ghost" size="icon" aria-label="Start over" onClick={startOver}>
               <RotateCcw />
             </Button>
           </div>
@@ -95,7 +138,32 @@ export default function Home() {
       ) : (
         <div className="grid flex-1 gap-4 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
           <div className="flex min-w-0 flex-col gap-4">
-            {image && <PhotoWithRegions src={image.previewUrl} regions={result?.regions ?? []} />}
+            {image && (
+              <PhotoWithRegions
+                src={image.previewUrl}
+                regions={result?.regions ?? []}
+                skyline={skylineLine}
+                trace={trace}
+                tracing={tracing}
+                onTrace={(pt) => setTrace((t) => [...t, pt])}
+              />
+            )}
+            {image && phase !== "preparing" && (
+              <SkylinePanel
+                bounds={bounds}
+                maxAreaKm2={5000}
+                tracing={tracing}
+                tracePoints={trace.length}
+                busy={skyBusy}
+                result={sky}
+                error={skyError}
+                selected={selected}
+                onTraceToggle={() => setTracing((t) => !t)}
+                onTraceClear={() => setTrace([])}
+                onSearch={() => void searchSkyline()}
+                onSelect={setSelected}
+              />
+            )}
             <Card>
               <CardContent className="pt-4">
                 <PipelineTimeline stages={stages} phase={phase} elapsed={elapsed} />
@@ -105,7 +173,16 @@ export default function Home() {
 
           <div className="flex min-w-0 flex-col gap-4">
             <Card className="h-[45dvh] min-h-80 overflow-hidden lg:h-[28rem]">
-              <LocationMap result={result} correcting={correcting} correction={correction} onCorrect={setCorrection} />
+              <LocationMap
+                result={result}
+                correcting={correcting}
+                correction={correction}
+                onCorrect={setCorrection}
+                onBounds={setBounds}
+                views={views}
+                selectedView={selected}
+                heat={sky?.heat}
+              />
             </Card>
 
             {error && (
@@ -113,7 +190,7 @@ export default function Home() {
                 <CardContent className="flex items-center gap-3 pt-4 text-sm">
                   <AlertTriangle className="size-5 text-danger" />
                   <span className="flex-1">{error}</span>
-                  <Button size="sm" variant="outline" onClick={reset}>
+                  <Button size="sm" variant="outline" onClick={startOver}>
                     Try another photo
                   </Button>
                 </CardContent>
@@ -137,8 +214,7 @@ export default function Home() {
       )}
 
       <footer className="pt-2 text-center text-xs text-muted-foreground">
-        Estimates come with honest uncertainty: a single photo rarely pins an exact street. Please don&apos;t use GeoInstant to
-        locate people without their consent. Place names ©{" "}
+        Estimates include uncertainty. Place names ©{" "}
         <a className="underline" href="https://www.geonames.org/" target="_blank" rel="noreferrer">
           GeoNames
         </a>{" "}
