@@ -1,0 +1,89 @@
+iso2,name,continent,drives_on
+AE,United Arab Emirates,AS,R
+AR,Argentina,SA,R
+AT,Austria,EU,R
+AU,Australia,OC,L
+BD,Bangladesh,AS,L
+BE,Belgium,EU,R
+BG,Bulgaria,EU,R
+BO,Bolivia,SA,R
+BR,Brazil,SA,R
+BW,Botswana,AF,L
+BY,Belarus,EU,R
+CA,Canada,NA,R
+CH,Switzerland,EU,R
+CL,Chile,SA,R
+CN,China,AS,R
+CO,Colombia,SA,R
+CZ,Czechia,EU,R
+DE,Germany,EU,R
+DK,Denmark,EU,R
+DZ,Algeria,AF,R
+EC,Ecuador,SA,R
+EE,Estonia,EU,R
+EG,Egypt,AF,R
+ES,Spain,EU,R
+ET,Ethiopia,AF,R
+FI,Finland,EU,R
+FR,France,EU,R
+GB,United Kingdom,EU,L
+GH,Ghana,AF,R
+GR,Greece,EU,R
+HK,Hong Kong,AS,L
+HR,Croatia,EU,R
+HU,Hungary,EU,R
+ID,Indonesia,AS,L
+IE,Ireland,EU,L
+IL,Israel,AS,R
+IN,India,AS,L
+IQ,Iraq,AS,R
+IR,Iran,AS,R
+IS,Iceland,EU,R
+IT,Italy,EU,R
+JO,Jordan,AS,R
+JP,Japan,AS,L
+KE,Kenya,AF,L
+KH,Cambodia,AS,R
+KR,South Korea,AS,R
+KZ,Kazakhstan,AS,R
+LK,Sri Lanka,AS,L
+LT,Lithuania,EU,R
+LV,Latvia,EU,R
+MA,Morocco,AF,R
+MG,Madagascar,AF,R
+MN,Mongolia,AS,R
+MX,Mexico,NA,R
+MY,Malaysia,AS,L
+NG,Nigeria,AF,R
+NL,Netherlands,EU,R
+NO,Norway,EU,R
+NP,Nepal,AS,L
+NZ,New Zealand,OC,L
+PE,Peru,SA,R
+PH,Philippines,AS,R
+PK,Pakistan,AS,L
+PL,Poland,EU,R
+PT,Portugal,EU,R
+RO,Romania,EU,R
+RS,Serbia,EU,R
+RU,Russia,EU,R
+SA,Saudi Arabia,AS,R
+SE,Sweden,EU,R
+SG,Singapore,AS,L
+SK,Slovakia,EU,R
+SN,Senegal,AF,R
+TH,Thailand,AS,L
+TN,Tunisia,AF,R
+TR,Turkey,AS,R
+TW,Taiwan,AS,R
+TZ,Tanzania,AF,L
+UA,Ukraine,EU,R
+UG,Uganda,AF,L
+US,United States,NA,R
+UY,Uruguay,SA,R
+UZ,Uzbekistan,AS,R
+VE,Venezuela,SA,R
+VN,Vietnam,AS,R
+ZA,South Africa,AF,L
+ZM,Zambia,AF,L
+ZW,Zimbabwe,AF,L

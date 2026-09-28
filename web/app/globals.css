@@ -1,0 +1,77 @@
+@import "tailwindcss";
+@import "maplibre-gl/dist/maplibre-gl.css";
+
+/* shadcn/ui-style tokens. One accent colour; everything else is neutral so the map and the
+   photo carry the colour. */
+:root {
+  --background: oklch(0.985 0.002 250);
+  --foreground: oklch(0.2 0.01 260);
+  --card: oklch(1 0 0);
+  --card-foreground: var(--foreground);
+  --muted: oklch(0.955 0.004 250);
+  --muted-foreground: oklch(0.5 0.012 260);
+  --border: oklch(0.91 0.005 250);
+  --ring: oklch(0.62 0.15 200);
+  --primary: oklch(0.56 0.13 200);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.955 0.004 250);
+  --secondary-foreground: var(--foreground);
+  --success: oklch(0.62 0.15 150);
+  --warning: oklch(0.75 0.15 75);
+  --danger: oklch(0.6 0.2 25);
+  --radius: 0.75rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: oklch(0.16 0.008 260);
+    --foreground: oklch(0.95 0.005 250);
+    --card: oklch(0.2 0.01 260);
+    --muted: oklch(0.24 0.01 260);
+    --muted-foreground: oklch(0.7 0.012 260);
+    --border: oklch(0.3 0.012 260);
+    --primary: oklch(0.72 0.13 200);
+    --primary-foreground: oklch(0.16 0.008 260);
+    --secondary: oklch(0.26 0.01 260);
+  }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-ring: var(--ring);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 4px);
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+  }
+}
+
+.maplibregl-ctrl-attrib {
+  font-size: 10px;
+}

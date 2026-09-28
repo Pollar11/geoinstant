@@ -1,0 +1,14 @@
+node_modules/
+.next/
+.npm-cache/
+*.tsbuildinfo
+.env
+.env.local
+inference/artifacts/
+inference/feedback/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/

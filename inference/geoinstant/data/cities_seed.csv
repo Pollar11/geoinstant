@@ -1,0 +1,144 @@
+name,iso2,admin1,lat,lon,population
+New York,US,New York,40.7128,-74.0060,8336817
+Los Angeles,US,California,34.0522,-118.2437,3979576
+Chicago,US,Illinois,41.8781,-87.6298,2693976
+Houston,US,Texas,29.7604,-95.3698,2320268
+Phoenix,US,Arizona,33.4484,-112.0740,1680992
+Las Vegas,US,Nevada,36.1699,-115.1398,641903
+San Francisco,US,California,37.7749,-122.4194,873965
+Seattle,US,Washington,47.6062,-122.3321,737015
+Miami,US,Florida,25.7617,-80.1918,442241
+Denver,US,Colorado,39.7392,-104.9903,715522
+Anchorage,US,Alaska,61.2181,-149.9003,291247
+Honolulu,US,Hawaii,21.3069,-157.8583,345064
+Twentynine Palms,US,California,34.1356,-116.0542,26000
+Toronto,CA,Ontario,43.6532,-79.3832,2794356
+Vancouver,CA,British Columbia,49.2827,-123.1207,662248
+Montreal,CA,Quebec,45.5017,-73.5673,1762949
+Mexico City,MX,Ciudad de Mexico,19.4326,-99.1332,9209944
+Guadalajara,MX,Jalisco,20.6597,-103.3496,1385629
+Bogota,CO,Bogota,4.7110,-74.0721,7743955
+Lima,PE,Lima,-12.0464,-77.0428,9751717
+Quito,EC,Pichincha,-0.1807,-78.4678,2011388
+Caracas,VE,Distrito Capital,10.4806,-66.9036,2082000
+La Paz,BO,La Paz,-16.4897,-68.1193,757184
+Santiago,CL,Santiago,-33.4489,-70.6693,6257516
+Buenos Aires,AR,Buenos Aires,-34.6037,-58.3816,3075646
+Montevideo,UY,Montevideo,-34.9011,-56.1645,1319108
+Sao Paulo,BR,Sao Paulo,-23.5505,-46.6333,12325232
+Rio de Janeiro,BR,Rio de Janeiro,-22.9068,-43.1729,6747815
+Manaus,BR,Amazonas,-3.1190,-60.0217,2219580
+London,GB,England,51.5074,-0.1278,8982000
+Edinburgh,GB,Scotland,55.9533,-3.1883,524930
+Dublin,IE,Leinster,53.3498,-6.2603,1173179
+Paris,FR,Ile-de-France,48.8566,2.3522,2161000
+Marseille,FR,Provence-Alpes-Cote d'Azur,43.2965,5.3698,870018
+Lyon,FR,Auvergne-Rhone-Alpes,45.7640,4.8357,516092
+Madrid,ES,Madrid,40.4168,-3.7038,3223334
+Barcelona,ES,Catalonia,41.3874,2.1686,1620343
+Seville,ES,Andalusia,37.3891,-5.9845,688711
+Lisbon,PT,Lisbon,38.7223,-9.1393,504718
+Porto,PT,Porto,41.1579,-8.6291,231800
+Berlin,DE,Berlin,52.5200,13.4050,3644826
+Munich,DE,Bavaria,48.1351,11.5820,1471508
+Hamburg,DE,Hamburg,53.5511,9.9937,1841179
+Amsterdam,NL,North Holland,52.3676,4.9041,872680
+Brussels,BE,Brussels,50.8503,4.3517,185103
+Zurich,CH,Zurich,47.3769,8.5417,415367
+Vienna,AT,Vienna,48.2082,16.3738,1911191
+Rome,IT,Lazio,41.9028,12.4964,2872800
+Milan,IT,Lombardy,45.4642,9.1900,1352000
+Naples,IT,Campania,40.8518,14.2681,959470
+Athens,GR,Attica,37.9838,23.7275,664046
+Copenhagen,DK,Capital Region,55.6761,12.5683,602481
+Oslo,NO,Oslo,59.9139,10.7522,697010
+Bergen,NO,Vestland,60.3913,5.3221,285911
+Tromso,NO,Troms,69.6492,18.9553,77000
+Stockholm,SE,Stockholm,59.3293,18.0686,975904
+Helsinki,FI,Uusimaa,60.1699,24.9384,656229
+Reykjavik,IS,Capital Region,64.1466,-21.9426,131136
+Tallinn,EE,Harju,59.4370,24.7536,437619
+Riga,LV,Riga,56.9496,24.1052,632614
+Vilnius,LT,Vilnius,54.6872,25.2797,580020
+Warsaw,PL,Masovia,52.2297,21.0122,1790658
+Krakow,PL,Lesser Poland,50.0647,19.9450,779115
+Prague,CZ,Prague,50.0755,14.4378,1309000
+Bratislava,SK,Bratislava,48.1486,17.1077,475503
+Budapest,HU,Budapest,47.4979,19.0402,1752286
+Bucharest,RO,Bucharest,44.4268,26.1025,1883425
+Sofia,BG,Sofia,42.6977,23.3219,1236000
+Belgrade,RS,Belgrade,44.7866,20.4489,1166763
+Zagreb,HR,Zagreb,45.8150,15.9819,806341
+Kyiv,UA,Kyiv,50.4501,30.5234,2962180
+Lviv,UA,Lviv,49.8397,24.0297,721301
+Minsk,BY,Minsk,53.9006,27.5590,2009786
+Moscow,RU,Moscow,55.7558,37.6173,12506468
+Saint Petersburg,RU,Saint Petersburg,59.9343,30.3351,5383890
+Novosibirsk,RU,Novosibirsk,55.0084,82.9357,1625631
+Vladivostok,RU,Primorsky,43.1155,131.8855,600871
+Istanbul,TR,Istanbul,41.0082,28.9784,15462452
+Ankara,TR,Ankara,39.9334,32.8597,5663322
+Cairo,EG,Cairo,30.0444,31.2357,9539673
+Casablanca,MA,Casablanca-Settat,33.5731,-7.5898,3359818
+Marrakesh,MA,Marrakesh-Safi,31.6295,-7.9811,928850
+Algiers,DZ,Algiers,36.7538,3.0588,3415811
+Tunis,TN,Tunis,36.8065,10.1815,638845
+Dakar,SN,Dakar,14.7167,-17.4677,1146053
+Lagos,NG,Lagos,6.5244,3.3792,14862000
+Accra,GH,Greater Accra,5.6037,-0.1870,2291352
+Addis Ababa,ET,Addis Ababa,9.0300,38.7400,3352000
+Nairobi,KE,Nairobi,-1.2921,36.8219,4397073
+Kampala,UG,Central,0.3476,32.5825,1680600
+Dar es Salaam,TZ,Dar es Salaam,-6.7924,39.2083,4364541
+Lusaka,ZM,Lusaka,-15.3875,28.3228,2731696
+Harare,ZW,Harare,-17.8252,31.0335,1542813
+Gaborone,BW,South-East,-24.6282,25.9231,231592
+Johannesburg,ZA,Gauteng,-26.2041,28.0473,5635127
+Cape Town,ZA,Western Cape,-33.9249,18.4241,4618000
+Antananarivo,MG,Analamanga,-18.8792,47.5079,1275207
+Dubai,AE,Dubai,25.2048,55.2708,3331420
+Riyadh,SA,Riyadh,24.7136,46.6753,7676654
+Amman,JO,Amman,31.9454,35.9284,4007526
+Jerusalem,IL,Jerusalem,31.7683,35.2137,936425
+Baghdad,IQ,Baghdad,33.3152,44.3661,7144000
+Tehran,IR,Tehran,35.6892,51.3890,8693706
+Almaty,KZ,Almaty,43.2220,76.8512,1977011
+Tashkent,UZ,Tashkent,41.2995,69.2401,2571668
+Ulaanbaatar,MN,Ulaanbaatar,47.8864,106.9057,1466125
+Karachi,PK,Sindh,24.8607,67.0011,14910352
+Lahore,PK,Punjab,31.5204,74.3587,11126285
+Delhi,IN,Delhi,28.7041,77.1025,16787941
+Mumbai,IN,Maharashtra,19.0760,72.8777,12442373
+Bengaluru,IN,Karnataka,12.9716,77.5946,8443675
+Kolkata,IN,West Bengal,22.5726,88.3639,4496694
+Kathmandu,NP,Bagmati,27.7172,85.3240,1442271
+Dhaka,BD,Dhaka,23.8103,90.4125,8906039
+Colombo,LK,Western,6.9271,79.8612,752993
+Bangkok,TH,Bangkok,13.7563,100.5018,10539000
+Chiang Mai,TH,Chiang Mai,18.7883,98.9853,127240
+Phnom Penh,KH,Phnom Penh,11.5564,104.9282,2129371
+Hanoi,VN,Hanoi,21.0278,105.8342,8053663
+Ho Chi Minh City,VN,Ho Chi Minh City,10.8231,106.6297,8993082
+Kuala Lumpur,MY,Kuala Lumpur,3.1390,101.6869,1982112
+Singapore,SG,Singapore,1.3521,103.8198,5685807
+Jakarta,ID,Jakarta,-6.2088,106.8456,10562088
+Denpasar,ID,Bali,-8.6705,115.2126,725314
+Manila,PH,Metro Manila,14.5995,120.9842,1846513
+Hong Kong,HK,Hong Kong,22.3193,114.1694,7481800
+Taipei,TW,Taipei,25.0330,121.5654,2646204
+Beijing,CN,Beijing,39.9042,116.4074,21540000
+Shanghai,CN,Shanghai,31.2304,121.4737,24870895
+Guangzhou,CN,Guangdong,23.1291,113.2644,18676605
+Chengdu,CN,Sichuan,30.5728,104.0668,16330000
+Seoul,KR,Seoul,37.5665,126.9780,9776000
+Busan,KR,Busan,35.1796,129.0756,3429000
+Tokyo,JP,Tokyo,35.6762,139.6503,13960000
+Osaka,JP,Osaka,34.6937,135.5023,2691000
+Sapporo,JP,Hokkaido,43.0618,141.3545,1973000
+Sydney,AU,New South Wales,-33.8688,151.2093,5312163
+Melbourne,AU,Victoria,-37.8136,144.9631,5078193
+Perth,AU,Western Australia,-31.9505,115.8605,2085973
+Brisbane,AU,Queensland,-27.4698,153.0251,2560720
+Alice Springs,AU,Northern Territory,-23.6980,133.8807,25000
+Auckland,NZ,Auckland,-36.8485,174.7633,1657200
+Christchurch,NZ,Canterbury,-43.5321,172.6362,381500

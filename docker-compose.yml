@@ -1,0 +1,30 @@
+# docker compose up --build → http://localhost:3300
+# Model/index artifacts go in ./inference/artifacts (see docs/DESIGN.md).
+services:
+  inference:
+    build: ./inference
+    environment:
+      GEOINSTANT_PROXY_API_KEYS: '["${GEOINSTANT_PROXY_KEY:-change-me-proxy-key}"]'
+      GEOINSTANT_VLM_MODE: ${GEOINSTANT_VLM_MODE:-enrich}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GEOINSTANT_CORS_ORIGINS: '["http://localhost:3300"]'
+    volumes:
+      - ./inference/artifacts:/artifacts
+      - feedback:/feedback
+    # GPU hosts: uncomment and build with the GPU args in inference/Dockerfile.
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices: [{ driver: nvidia, count: 1, capabilities: [gpu] }]
+    expose: ["8000"]
+
+  web:
+    build: ./web
+    environment:
+      INFERENCE_URL: http://inference:8000
+      INFERENCE_API_KEY: ${GEOINSTANT_PROXY_KEY:-change-me-proxy-key}
+    ports: ["3300:3300"]
+    depends_on: [inference]
+
+volumes:
+  feedback:
