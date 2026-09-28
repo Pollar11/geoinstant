@@ -1,9 +1,9 @@
 /** Album (private archive) types and API calls; mirrors inference/geoinstant/archive. */
 import { z } from "zod";
 
-import { Investigation, LocateResult } from "./api-types";
+import { Investigation, LocateResult, StreetJob, StreetResult } from "./api-types";
 import { ApiError } from "./client";
-import { readGps, downscale } from "./prepare-image";
+import { downscale, readGps, readTaken } from "./prepare-image";
 
 export const Location = z.object({
   latitude: z.number(),
@@ -31,46 +31,11 @@ export const PhotoSummary = z.object({
   location: Location.nullable(),
   lead: z.string().nullable().optional(),
   searching: z.string().nullable().optional(),
+  taken_at: z.string().nullable().optional(),
 });
 export type PhotoSummary = z.infer<typeof PhotoSummary>;
 
-export const StreetMatch = z.object({
-  image_id: z.string(),
-  latitude: z.number(),
-  longitude: z.number(),
-  heading: z.number(),
-  captured_at: z.string(),
-  image_url: z.string(),
-  similarity: z.number(),
-  inliers: z.number(),
-  source: z.string().default("Mapillary"),
-  page_url: z.string().default(""),
-});
-export type StreetMatch = z.infer<typeof StreetMatch>;
-
-export const StreetResult = z.object({
-  verified: z.boolean(),
-  best: StreetMatch.nullable(),
-  candidates: z.array(StreetMatch),
-  searched: z.number(),
-  bbox: z.tuple([z.number(), z.number(), z.number(), z.number()]),
-  message: z.string(),
-  building: z
-    .object({ address: z.string(), latitude: z.number(), longitude: z.number(), distance_m: z.number(), in_view: z.boolean() })
-    .nullable()
-    .optional(),
-});
-export type StreetResult = z.infer<typeof StreetResult>;
-
-export const StreetJob = z.object({
-  id: z.string(),
-  status: z.enum(["queued", "listing", "downloading", "matching", "verifying", "done", "error"]),
-  progress: z.number(),
-  message: z.string(),
-  result: StreetResult.nullable(),
-  photo_id: z.string().nullable(),
-});
-export type StreetJob = z.infer<typeof StreetJob>;
+export { StreetJob, StreetMatch, StreetResult } from "./api-types";
 
 export const PhotoDetail = PhotoSummary.extend({
   note: z.string().nullable(),
@@ -127,14 +92,22 @@ export const archive = {
 
   /** Shrink on the device (≤ 2048 px) and send GPS read from the original (or the phone's live position) alongside. */
   async upload(file: File, here?: { latitude: number; longitude: number }): Promise<{ added: string[]; skipped: string[] }> {
-    const gps = here ? { ...here, capturedAt: new Date().toISOString() } : await readGps(file);
+    const gps = here ?? (await readGps(file));
+    // Shrinking strips EXIF, so the camera time goes alongside (local clock, like cameras write it).
+    const taken = here ? localNow() : await readTaken(file);
     const small = await downscale(file, 2048);
     const form = new FormData();
     form.append("files", small?.blob ?? file, file.name);
-    form.append("gps", JSON.stringify([gps ? { lat: gps.latitude, lon: gps.longitude, taken: gps.capturedAt } : null]));
+    form.append("gps", JSON.stringify([{ lat: gps?.latitude, lon: gps?.longitude, taken }]));
     return call("photos", z.object({ added: z.array(z.string()), skipped: z.array(z.string()) }), { method: "POST", body: form });
   },
 };
+
+function localNow(): string {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
 
 export async function login(password: string): Promise<void> {
   const res = await fetch("/api/auth/login", jsonInit("POST", { password }));

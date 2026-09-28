@@ -15,8 +15,11 @@ import { InvestigationPanel, isPinned } from "@/components/InvestigationPanel";
 import { SkylinePanel } from "@/components/SkylinePanel";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import type { BBox, Investigation, InvestigationStep, RegionBox, SkylineResult } from "@/lib/api-types";
-import { investigate, sendFeedback, skylineSearch } from "@/lib/client";
+import { StreetMatchPanel } from "@/components/album/StreetMatchPanel";
+import type { BBox, Investigation, InvestigationStep, RegionBox, SearchLead, SkylineResult, StreetJob } from "@/lib/api-types";
+import { investigate, sendFeedback, skylineSearch, startStreetSearch, streetSearchJob } from "@/lib/client";
+
+const INDOOR = new Set(["home", "bar_restaurant", "other_indoor"]); // rooms can't be matched against street photos
 import { useLocate } from "@/lib/use-locate";
 
 export default function Home() {
@@ -41,6 +44,13 @@ export default function Home() {
   const [invError, setInvError] = useState<string | null>(null);
   const [invStarted, setInvStarted] = useState(false);
 
+  // Exact spot: street photos around the investigation's (server-signed) lead
+  const [lead, setLead] = useState<SearchLead | null>(null);
+  const [smJob, setSmJob] = useState<StreetJob | null>(null);
+  const [smError, setSmError] = useState<string | null>(null);
+  const [smSel, setSmSel] = useState(0);
+  const smResult = smJob?.result ?? null;
+
   const runInvestigation = useCallback(
     async (context: string) => {
       if (!image) return;
@@ -49,10 +59,16 @@ export default function Home() {
       setInvError(null);
       setInvSteps([]);
       setInv(null);
+      setLead(null);
+      setSmJob(null);
+      setSmError(null);
       try {
         for await (const ev of investigate(image.blob, context)) {
           if (ev.type === "step") setInvSteps((s) => [...s, ev.step]);
-          else setInv(ev.investigation);
+          else {
+            setInv(ev.investigation);
+            setLead(ev.lead ?? null);
+          }
         }
       } catch (e) {
         setInvError(e instanceof Error ? e.message : "Investigation failed");
@@ -68,6 +84,31 @@ export default function Home() {
     if (phase === "done" && result?.source === "visual" && result.analysis && !invStarted) void runInvestigation("");
   }, [phase, result, invStarted, runInvestigation]);
 
+  // Not pinned yet and outdoors: search street photos around the lead, automatically.
+  const indoor = INDOOR.has(result?.analysis?.scene ?? "");
+  useEffect(() => {
+    if (!image || !lead || !inv || invRunning || smJob || smError || indoor || (inv.report && isPinned(inv.report))) return;
+    startStreetSearch(image.blob, lead)
+      .then(setSmJob)
+      .catch((e: Error) => setSmError(e.message));
+  }, [image, lead, inv, invRunning, smJob, smError, indoor]);
+
+  const smRunning = smJob != null && smJob.status !== "done" && smJob.status !== "error";
+  const smId = smJob?.id;
+  useEffect(() => {
+    if (!smRunning || !smId) return;
+    const t = setInterval(async () => {
+      try {
+        const j = await streetSearchJob(smId);
+        setSmJob(j);
+        if (j.status === "error") setSmError(j.message);
+      } catch (e) {
+        setSmError(e instanceof Error ? e.message : "Street search failed");
+      }
+    }, 2000);
+    return () => clearInterval(t);
+  }, [smRunning, smId]);
+
   const start = useCallback(
     (f: File) => {
       setCorrecting(false);
@@ -81,6 +122,10 @@ export default function Home() {
       setInv(null);
       setInvSteps([]);
       setInvError(null);
+      setLead(null);
+      setSmJob(null);
+      setSmError(null);
+      setSmSel(0);
       void run(f);
     },
     [run],
@@ -100,14 +145,18 @@ export default function Home() {
     [result, inv, invSteps],
   );
   const found = useMemo(() => {
+    if (smResult?.verified && smResult.best) return { latitude: smResult.best.latitude, longitude: smResult.best.longitude };
     const r = inv?.report;
     return r && isPinned(r) ? { latitude: r.latitude!, longitude: r.longitude! } : null;
-  }, [inv]);
+  }, [inv, smResult]);
   const skylineLine = useMemo(() => sky?.profile.filter((p) => p[2] > 0).map((p) => [p[0], p[1]] as [number, number]), [sky]);
   const startOver = useCallback(() => {
     setInvStarted(false);
     setInv(null);
     setInvSteps([]);
+    setLead(null);
+    setSmJob(null);
+    setSmError(null);
     setTracing(false);
     setTrace([]);
     setSky(null);
@@ -271,6 +320,9 @@ export default function Home() {
                 }}
               />
             )}
+            {image && smResult?.verified && (
+              <StreetMatchPanel photoUrl={image.previewUrl} job={smJob} result={smResult} error={smError} selected={smSel} onSelect={setSmSel} />
+            )}
             {(invStarted || (result?.source === "visual" && phase === "done")) && (
               <InvestigationPanel
                 steps={invSteps}
@@ -278,7 +330,11 @@ export default function Home() {
                 running={invRunning}
                 error={invError}
                 onStart={(c) => void runInvestigation(c)}
+                street={smResult?.verified ? "found" : smRunning || (lead && !smJob && !smError && !indoor) ? "searching" : smJob ? "not_found" : null}
               />
+            )}
+            {image && (smJob || smError) && !smResult?.verified && (
+              <StreetMatchPanel photoUrl={image.previewUrl} job={smJob} result={smResult} error={smError} selected={smSel} onSelect={setSmSel} />
             )}
             {result?.source !== "visual" && result && <ResultPanel result={result} refining={refining} onVerdict={verdict} />}
             {!result && !error && <ResultSkeleton />}

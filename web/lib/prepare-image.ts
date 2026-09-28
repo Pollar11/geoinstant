@@ -25,6 +25,18 @@ export async function readGps(file: Blob): Promise<{ latitude: number; longitude
   }
 }
 
+/** Camera clock as written in the file ("2019-06-12T14:05:33"), kept as local time. Digital cameras have it even without GPS. */
+export async function readTaken(file: Blob): Promise<string | null> {
+  try {
+    const out = await exifr.parse(file, { pick: ["DateTimeOriginal", "CreateDate"], reviveValues: false });
+    const raw = String(out?.DateTimeOriginal ?? out?.CreateDate ?? "");
+    const m = raw.match(/^(\d{4})[:-](\d{2})[:-](\d{2})[ T](\d{2}):(\d{2}):(\d{2})/);
+    return m ? `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}` : null;
+  } catch {
+    return null;
+  }
+}
+
 export function targetSize(width: number, height: number, maxEdge = MAX_EDGE): { width: number; height: number } {
   const scale = Math.min(1, maxEdge / Math.max(width, height));
   return { width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)) };

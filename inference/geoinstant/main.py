@@ -6,6 +6,7 @@ import asyncio
 import hmac
 import json
 import logging
+import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -15,6 +16,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from starlette.datastructures import UploadFile
 from starlette.formparsers import MultiPartParser
 
+from . import leads
 from .archive.api import router as archive_router
 from .archive.service import ArchiveService
 from .archive.store import ArchiveStore
@@ -42,7 +44,7 @@ from .skyline.extract import detect, from_trace
 from .skyline.service import SkylineService
 from .streetmatch.mapillary import MapillaryClient
 from .streetmatch.panoramax import PanoramaxClient
-from .streetmatch.service import StreetMatchService
+from .streetmatch.service import Job, StreetMatchService
 from .streetmatch.sources import MultiSource, StreetSource
 from .streetmatch.verify import load_matcher
 
@@ -63,6 +65,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         settings.skyline_max_km,
     )
     app.state.streetmatch = street_service(settings, app.state.engine.embedder)
+    app.state.lead_secret = os.urandom(32)  # leads are only valid for this process's lifetime
     app.state.archive = None
     if settings.archive_token:
         app.state.archive = ArchiveService(
@@ -345,9 +348,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         async def events() -> AsyncIterator[bytes]:
             async for ev in inv.run(img, context):
                 if isinstance(ev, Investigation):
+                    secret: bytes = request.app.state.lead_secret
+                    lead = leads.issue(secret, data, ev.report, settings.auto_street_km2, settings.people_precision_policy)
                     if ev.report and settings.people_precision_policy == "coarsen":
                         ev = ev.model_copy(update={"report": ev.report.coarsened()})
-                    payload = {"type": "report", "investigation": ev.model_dump(mode="json")}
+                    payload = {
+                        "type": "report",
+                        "investigation": ev.model_dump(mode="json"),
+                        "lead": lead.model_dump() if lead else None,  # where the street search may run
+                    }
                 else:
                     payload = {"type": "step", "step": ev.model_dump(mode="json")}
                 yield f"data: {json.dumps(payload, separators=(',', ':'))}\n\n".encode()
@@ -355,6 +364,43 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return StreamingResponse(
             events(), media_type="text/event-stream", headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"}
         )
+
+    @app.post("/v1/streetmatch", response_model=Job, status_code=202)
+    async def street_search(request: Request) -> Job:
+        """Exact spot for one photo: street photos around the investigation's lead. Multipart: image + the signed lead."""
+        # Heavy, but each search needs a lead from its own (rate-limited) investigation; locate 1 + investigate 5
+        # + this must fit one visitor's burst (10).
+        check(request, 2.0)
+        sm: StreetMatchService = request.app.state.streetmatch
+        if not sm.enabled:
+            raise HTTPException(503, "No street photo source is configured")
+        form = await request.form(max_files=1, max_fields=6)
+        f = form.get("image")
+        if not isinstance(f, UploadFile):
+            raise HTTPException(400, "Expected a multipart field named 'image'")
+        data = await f.read()
+        if len(data) > settings.max_upload_bytes:
+            raise HTTPException(413, "Image is too large")
+        try:
+            lat, lon, km2 = (float(str(form.get(k))) for k in ("latitude", "longitude", "km2"))
+        except (TypeError, ValueError) as e:
+            raise HTTPException(422, "Expected latitude, longitude and km2") from e
+        if not leads.valid(request.app.state.lead_secret, data, lat, lon, km2, str(form.get("token") or "")):
+            raise HTTPException(403, "Search the spot this photo's investigation pointed to")
+        try:
+            img = (await asyncio.to_thread(decode, data, 2048, settings.max_pixels)).image
+        except ImageError as e:
+            raise HTTPException(e.status, str(e)) from e
+        return sm.start_around(img, lat, lon, km2)
+
+    @app.get("/v1/streetmatch/{job_id}", response_model=Job)
+    async def street_search_job(job_id: str, request: Request) -> Job:
+        check(request, 0.1)  # polled every couple of seconds
+        sm: StreetMatchService = request.app.state.streetmatch
+        job = sm.jobs.get(job_id)
+        if job is None:
+            raise HTTPException(404, "No such search")
+        return job
 
     @app.get("/v1/nearby", response_model=Nearby, dependencies=[Depends(guard)])
     async def nearby_photos(

@@ -7,7 +7,9 @@ import {
   Nearby,
   Place,
   SkylineResult,
+  StreetJob,
   type BBox,
+  type SearchLead,
   type FeedbackRequest,
 } from "./api-types";
 import { readSse } from "./sse";
@@ -113,6 +115,25 @@ export async function* investigate(image: Blob, context: string, signal?: AbortS
     const parsed = InvestigateEvent.safeParse(JSON.parse(data));
     if (parsed.success) yield parsed.data;
   }
+}
+
+/** Exact spot: compare the photo with street photos around the investigation's lead. */
+export async function startStreetSearch(image: Blob, lead: SearchLead) {
+  const form = new FormData();
+  form.append("image", image, "photo.jpg");
+  form.append("latitude", String(lead.latitude));
+  form.append("longitude", String(lead.longitude));
+  form.append("km2", String(lead.km2));
+  form.append("token", lead.token);
+  const res = await fetch("/api/streetmatch", { method: "POST", body: form });
+  if (!res.ok) throw await errorFrom(res);
+  return StreetJob.parse(await res.json());
+}
+
+export async function streetSearchJob(id: string) {
+  const res = await fetch(`/api/streetmatch/${id}`);
+  if (!res.ok) throw await errorFrom(res);
+  return StreetJob.parse(await res.json());
 }
 
 export async function nearby(lat: number, lon: number, heading?: number) {

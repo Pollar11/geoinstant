@@ -16,7 +16,7 @@ from geoinstant.streetmatch.sources import MultiSource
 from geoinstant.streetmatch.verify import LightGlueMatcher
 
 from .conftest import jpeg_bytes
-from .test_streetmatch import BBOX, POS, SCENES, FakeMapillary, old_print
+from .test_streetmatch import BBOX, POS, SCENES, FakeMapillary, old_print, street
 
 OVERPASS = "https://overpass.test/api/interpreter"
 
@@ -210,3 +210,38 @@ def test_lead_needs_city_or_better() -> None:
     assert lead_point(r, 25) == (1.0, 2.0, 25)
     r.investigation = {"report": {"latitude": 1.0, "longitude": 2.0, "precision": "street"}}
     assert lead_point(r, 25) == (1.0, 2.0, 9.0)
+
+
+async def test_same_day_photo_is_found_from_a_pinned_one(tmp_path: Path) -> None:
+    """Digital camera, no GPS: once one photo of the day is pinned, the others are searched around it."""
+    from geoinstant.archive.service import ArchiveService, own_location
+    from geoinstant.archive.store import ArchiveStore
+
+    store = ArchiveStore(tmp_path / "archive")
+    sm = StreetMatchService(tmp_path / "sm", HashEmbedder(), mly(FakeMapillary()))
+    svc = ArchiveService(store, None, "off", 1, streetmatch=sm)  # type: ignore[arg-type]
+    lat, lon = POS["img15"]
+    pinned = store.add("IMG_0101.jpg", jpeg_bytes(street(1)), None, "a", 50_000_000, "2019-06-12T10:00:00")
+    other = store.add("IMG_0102.jpg", jpeg_bytes(old_print(SCENES["img15"])), None, "b", 50_000_000, "2019-06-12T12:30:00")
+    later = store.add("IMG_0400.jpg", jpeg_bytes(street(2)), None, "c", 50_000_000, "2019-06-14T12:30:00")
+    for pid in (other, later):
+        store.set_result(
+            pid, {"latitude": 0, "longitude": 0, "resolution": "world", "confidence": 1, "analysis": {"scene": "urban"}}
+        )
+
+    # Nothing pinned yet: no lead, nothing searched.
+    await svc.auto_locate(other)
+    assert other not in svc.searching
+    assert svc.summaries()[1].lead is None
+
+    # The family remembers where the first photo was.
+    store.update(pinned, {"user_lat": lat + 0.001, "user_lon": lon, "user_label": "Hotel Sole"})
+    lead = {s.id: s.lead for s in svc.summaries()}
+    assert lead[other] == "Same day as IMG_0101.jpg at Hotel Sole (2 h apart)"
+    assert lead[later] is None  # two days later: no shared lead
+
+    await svc.wake_same_day(pinned)
+    await asyncio.gather(*sm._tasks)
+    loc = own_location(store.get(other))  # type: ignore[arg-type]
+    assert loc and loc.resolution == "exact" and abs(loc.latitude - lat) < 1e-6
+    assert own_location(store.get(later)) is None  # type: ignore[arg-type]

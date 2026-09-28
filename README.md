@@ -76,6 +76,16 @@ Select photos from the same trip and click **Link as same place/event**; once on
 ARCHIVE_PASSWORD=… ANTHROPIC_API_KEY=… docker compose up --build   # http://localhost:3300/album
 ```
 
+## One photo, no sign-in (homepage)
+
+Open the site and drop in a photo:
+
+1. **GPS in the file:** the photo is pinned instantly.
+2. **Otherwise:** clues, then the investigation (web search, maps), which gives a lead.
+3. **Outdoor photos:** street photos around the lead are compared automatically, and a verified match shows the exact spot, the address it faces, and then and now side by side.
+
+When people are the main subject, the public page stays at city level and skips the exact search. The server only accepts a street search with a lead it signed for that exact photo.
+
 ## Save this place (new photos)
 
 At a place you'll want to remember, open `/album` on your phone and tap **Save this place**:

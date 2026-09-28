@@ -186,9 +186,51 @@ export const Investigation = z.object({
 });
 export type Investigation = z.infer<typeof Investigation>;
 
+export const StreetMatch = z.object({
+  image_id: z.string(),
+  latitude: z.number(),
+  longitude: z.number(),
+  heading: z.number(),
+  captured_at: z.string(),
+  image_url: z.string(),
+  similarity: z.number(),
+  inliers: z.number(),
+  source: z.string().default("Mapillary"),
+  page_url: z.string().default(""),
+});
+export type StreetMatch = z.infer<typeof StreetMatch>;
+
+export const StreetResult = z.object({
+  verified: z.boolean(),
+  best: StreetMatch.nullable(),
+  candidates: z.array(StreetMatch),
+  searched: z.number(),
+  bbox: z.tuple([z.number(), z.number(), z.number(), z.number()]),
+  message: z.string(),
+  building: z
+    .object({ address: z.string(), latitude: z.number(), longitude: z.number(), distance_m: z.number(), in_view: z.boolean() })
+    .nullable()
+    .optional(),
+});
+export type StreetResult = z.infer<typeof StreetResult>;
+
+export const StreetJob = z.object({
+  id: z.string(),
+  status: z.enum(["queued", "listing", "downloading", "matching", "verifying", "done", "error"]),
+  progress: z.number(),
+  message: z.string(),
+  result: StreetResult.nullable(),
+  photo_id: z.string().nullable(),
+});
+export type StreetJob = z.infer<typeof StreetJob>;
+
+/** Signed by the server: where the street search may run for this photo (none when people are the subject). */
+export const SearchLead = z.object({ latitude: z.number(), longitude: z.number(), km2: z.number(), token: z.string() });
+export type SearchLead = z.infer<typeof SearchLead>;
+
 export const InvestigateEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("step"), step: InvestigationStep }),
-  z.object({ type: z.literal("report"), investigation: Investigation }),
+  z.object({ type: z.literal("report"), investigation: Investigation, lead: SearchLead.nullable().optional() }),
 ]);
 
 export const Nearby = z.object({

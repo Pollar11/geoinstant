@@ -178,6 +178,8 @@ class StreetMatchService:
         on_done: Callable[[Job], Awaitable[None]] | None,
     ) -> Job:
         job = Job(id=uuid.uuid4().hex[:12], photo_id=photo_id, message="Waiting for the previous search…")
+        for old in [k for k, j in self.jobs.items() if j.status in ("done", "error")][: max(0, len(self.jobs) - 500)]:
+            del self.jobs[old]  # keep memory bounded; results that matter are saved elsewhere
         self.jobs[job.id] = job
         task = asyncio.create_task(self._run(job, work, on_done))
         self._tasks.add(task)
