@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
+from collections.abc import Coroutine
+from datetime import datetime
 from typing import Any, Literal
 
 from PIL import Image
@@ -17,7 +19,7 @@ from ..pipeline import Engine
 from ..schemas import ErrorEvent, LocateResult, ResultEvent
 from ..skyline.service import SkylineService
 from ..streetmatch.service import Job, StreetMatchService, StreetResult
-from .auto import INDOOR, lead_point, scene_of, skyline_around
+from .auto import INDOOR, NEAR_KM2, lead_point, scene_of, skyline_around
 from .store import ArchiveStore, Row
 
 log = logging.getLogger(__name__)
@@ -27,6 +29,10 @@ RES_RANK = {"exact": 6, "street": 5, "city": 4, "region": 3, "country": 2, "cont
 # Only a street/building-level answer counts as a location; anything coarser is shown as a lead.
 PINNED = {"exact", "street"}
 SHAREABLE = PINNED
+
+
+SAME_DAY_H = 12.0  # photos this close in time share a lead
+NEAR_H = 3.0  # this close: probably the same neighbourhood
 
 
 class Location(BaseModel):
@@ -54,6 +60,7 @@ class PhotoSummary(BaseModel):
     location: Location | None
     lead: str | None = None
     searching: str | None = None  # automatic street/skyline search in progress
+    taken_at: str | None = None  # camera clock
 
 
 class PhotoDetail(PhotoSummary):
@@ -79,6 +86,11 @@ INVESTIGATION_RES = {
     "region": "region",
     "country": "country",
 }
+
+
+def _inside(lat: float, lon: float, bbox: list[float]) -> bool:
+    s, w, n, e = bbox
+    return s <= lat <= n and w <= lon <= e
 
 
 def own_location(row: Row) -> Location | None:
@@ -157,6 +169,34 @@ def lead_of(row: Row) -> str | None:
     return None
 
 
+def hours_apart(a: str, b: str) -> float:
+    try:
+        return abs((datetime.fromisoformat(a) - datetime.fromisoformat(b)).total_seconds()) / 3600
+    except ValueError:
+        return float("inf")
+
+
+def same_day(row: Row, rows: list[Row], own: dict[str, Location | None]) -> tuple[Row, Location, float] | None:
+    """The pinned photo taken closest in time to this one (within 12 h): where the family was that day."""
+    if not row.taken_at:
+        return None
+    best: tuple[Row, Location, float] | None = None
+    for r in rows:
+        loc = own.get(r.id)
+        if r.id == row.id or not r.taken_at or loc is None:
+            continue
+        h = hours_apart(row.taken_at, r.taken_at)
+        if h <= SAME_DAY_H and (best is None or h < best[2]):
+            best = (r, loc, h)
+    return best
+
+
+def same_day_text(near: tuple[Row, Location, float]) -> str:
+    r, loc, h = near
+    gap = "within the hour" if h < 1 else f"{h:.0f} h apart"
+    return f"Same day as {r.filename} at {loc.label} ({gap})"
+
+
 def _strength(loc: Location) -> tuple[int, float]:
     return (RES_RANK.get(loc.resolution, 0) + (10 if loc.source == "you" else 0), loc.confidence)
 
@@ -204,6 +244,7 @@ class ArchiveService:
         self.auto_street_km2 = auto_street_km2
         self.auto_skyline_km = auto_skyline_km
         self.searching: dict[str, Job | str] = {}
+        self._background: set[asyncio.Task[None]] = set()
         self.engine = engine
         self.people_policy = people_policy
         self.concurrency = max(1, concurrency)
@@ -245,6 +286,9 @@ class ArchiveService:
                 continue
             try:
                 await self.auto_locate(row.id)
+                done = await asyncio.to_thread(self.store.get, row.id)
+                if done and own_location(done):
+                    await self.wake_same_day(row.id)
             except Exception:  # the analysis stands; the automatic search is a bonus
                 log.exception("automatic search failed for %s", row.id)
 
@@ -254,9 +298,19 @@ class ArchiveService:
         if row is None or own_location(row) is not None or pid in self.searching:
             return
         lead = lead_point(row, self.auto_street_km2)
+        rows = await asyncio.to_thread(self.store.all)
+        near = same_day(row, rows, {r.id: own_location(r) for r in rows})
+        if near:
+            # Where the family was that day beats a town-level guess; within 3 h, beats everything.
+            _, loc, h = near
+            if lead is None or lead[2] > NEAR_KM2 or h <= NEAR_H:
+                lead = (loc.latitude, loc.longitude, NEAR_KM2 if h <= NEAR_H else self.auto_street_km2)
         if lead is None:
             return
         lat, lon, km2 = lead
+        prev = row.streetmatch or {}
+        if prev.get("bbox") and _inside(lat, lon, prev["bbox"]):
+            return  # already searched around here
         scene = scene_of(row)
         img = await asyncio.to_thread(self.load_image, pid)
         if scene == "mountain" and self.skyline is not None:
@@ -278,8 +332,24 @@ class ArchiveService:
             self.searching.pop(pid, None)
             if job.result:
                 await asyncio.to_thread(self.store.set_streetmatch, pid, job.result.model_dump(mode="json"))
+                if job.result.verified:
+                    await self.wake_same_day(pid)
 
         self.searching[pid] = self.streetmatch.start_around(img, lat, lon, km2, pid, save)
+
+    async def wake_same_day(self, pid: str) -> None:
+        """A photo was just pinned: search around it for the unpinned photos taken the same day."""
+        row = await asyncio.to_thread(self.store.get, pid)
+        if row is None or not row.taken_at:
+            return
+        for r in await asyncio.to_thread(self.store.all):
+            if r.id != pid and r.taken_at and hours_apart(r.taken_at, row.taken_at) <= SAME_DAY_H and own_location(r) is None:
+                await self.auto_locate(r.id)
+
+    def spawn(self, coro: Coroutine[None, None, None]) -> None:
+        task = asyncio.create_task(coro)
+        self._background.add(task)
+        task.add_done_callback(self._background.discard)
 
     def searching_message(self, pid: str) -> str | None:
         s = self.searching.get(pid)
@@ -314,15 +384,18 @@ class ArchiveService:
         rows = self.store.all()
         locs = resolve(rows)
         names = self.store.groups()
-        return [self._summary(r, locs[r.id], names) for r in rows]
+        own = {r.id: own_location(r) for r in rows}
+        return [self._summary(r, locs[r.id], names, same_day(r, rows, own)) for r in rows]
 
     def detail(self, pid: str) -> PhotoDetail | None:
         row = self.store.get(pid)
         if row is None:
             return None
-        rows = [r for r in self.store.all() if r.group_id == row.group_id] if row.group_id else [row]
+        every = self.store.all()
+        rows = [r for r in every if r.group_id == row.group_id] if row.group_id else [row]
         loc = resolve(rows)[row.id]
-        s = self._summary(row, loc, self.store.groups())
+        near = same_day(row, every, {r.id: own_location(r) for r in every})
+        s = self._summary(row, loc, self.store.groups(), near)
         return PhotoDetail(
             **s.model_dump(),
             note=row.note,
@@ -342,7 +415,9 @@ class ArchiveService:
             out.append(Group(id=gid, name=name, photo_ids=[r.id for r in members], location=best))
         return out
 
-    def _summary(self, r: Row, loc: Location | None, names: dict[str, str]) -> PhotoSummary:
+    def _summary(
+        self, r: Row, loc: Location | None, names: dict[str, str], near: tuple[Row, Location, float] | None = None
+    ) -> PhotoSummary:
         analysis: dict[str, Any] = (r.result or {}).get("analysis") or {}
         return PhotoSummary(
             id=r.id,
@@ -357,6 +432,7 @@ class ArchiveService:
             scene=analysis.get("scene"),
             era=analysis.get("era") or None,
             location=loc,
-            lead=None if loc else lead_of(r),
+            lead=None if loc else (same_day_text(near) if near else lead_of(r)),
             searching=None if loc else self.searching_message(r.id),
+            taken_at=r.taken_at,
         )

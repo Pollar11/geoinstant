@@ -13,6 +13,15 @@ import { Card, CardContent } from "@/components/ui/card";
 import { imageUrl, type Group, type PhotoDetail } from "@/lib/archive";
 import { formatCoord } from "@/lib/format";
 
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** "12 Jun 2019, 14:05": the camera's own clock, shown as written. */
+function formatTaken(iso: string): string {
+  const [d = "", t = ""] = iso.split("T");
+  const [y, m, day] = d.split("-");
+  return `${Number(day)} ${MONTHS[Number(m) - 1] ?? m} ${y}${t ? `, ${t.slice(0, 5)}` : ""}`;
+}
+
 const SOURCE_LABEL = { you: "Set by you", photo: "From this photo", group: "From its group" } as const;
 
 type Props = {
@@ -45,7 +54,10 @@ export function PhotoDetailView(p: Props) {
         <Button variant="ghost" size="sm" onClick={p.onBack}>
           <ArrowLeft /> All photos
         </Button>
-        <span className="truncate text-sm text-muted-foreground">{photo.filename}</span>
+        <span className="truncate text-sm text-muted-foreground">
+          {photo.filename}
+          {photo.taken_at && ` · taken ${formatTaken(photo.taken_at)}`}
+        </span>
       </div>
 
       <PhotoWithRegions

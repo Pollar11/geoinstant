@@ -169,6 +169,47 @@ def test_investigate_streams_steps_and_report(settings: Settings) -> None:
         assert events[-1]["investigation"]["report"]["place_name"].startswith("Taverna Nikos")
 
 
+def test_street_search_needs_the_photos_own_lead(settings: Settings) -> None:
+    import httpx
+
+    from geoinstant.models.investigator import Investigator
+    from geoinstant.streetmatch.mapillary import MapillaryClient
+
+    from .test_investigator import REPORT, FakeClient, block
+    from .test_streetmatch import FakeMapillary
+
+    app = create_app(settings)
+    photo, other = jpeg_bytes(synthetic_photo(9)), jpeg_bytes(synthetic_photo(10))
+
+    def lead_for(report: dict) -> dict | None:
+        client = FakeClient([[block("tool_use", id="t", name="report_location", input=report)]])
+        app.state.engine.investigator = Investigator(client, "claude-opus-5", "medium", "https://example.invalid", "test")
+        r = c.post("/v1/investigate", files={"image": ("p.jpg", photo, "image/jpeg")})
+        return [json.loads(ln[5:]) for ln in r.text.splitlines() if ln.startswith("data:")][-1]["lead"]
+
+    with TestClient(app) as c:
+        app.state.streetmatch.client = MapillaryClient(
+            "t", http=httpx.AsyncClient(transport=httpx.MockTransport(FakeMapillary()))
+        )
+        lead = lead_for(REPORT)
+        assert lead and lead["km2"] == 9.0 and abs(lead["latitude"] - REPORT["latitude"]) < 1e-9
+
+        def search(image: bytes, **change: object) -> httpx.Response:
+            form = {k: str(v) for k, v in {**lead, **change}.items()}
+            return c.post("/v1/streetmatch", files={"image": ("p.jpg", image, "image/jpeg")}, data=form)
+
+        assert search(photo, latitude=48.85).status_code == 403  # somewhere else
+        assert search(other).status_code == 403  # a different photo
+        job = search(photo)
+        assert job.status_code == 202
+        assert c.get(f"/v1/streetmatch/{job.json()['id']}").json()["id"] == job.json()["id"]
+
+        # People as the main subject: the public page stays at city level, so no exact search.
+        assert lead_for({**REPORT, "people_are_main_subject": True}) is None
+        # Too vague to search street by street.
+        assert lead_for({**REPORT, "precision": "region"}) is None
+
+
 def test_nearby_without_token_gives_links(settings: Settings) -> None:
     with client(settings) as c:
         r = c.get("/v1/nearby", params={"lat": 36.46, "lon": 25.37, "heading": 90}).json()

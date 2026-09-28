@@ -178,3 +178,31 @@ def test_place_search_endpoint_without_geocoder(settings: Settings, tmp_path: Pa
     with TestClient(create_app(settings_for(settings, tmp_path))) as c:
         assert c.get("/v1/archive/places?q=Venice", headers=TOKEN).json() == []
         assert c.get("/v1/archive/places?q=Venice").status_code == 401
+
+
+def test_camera_time_is_read_and_kept(settings: Settings, tmp_path: Path) -> None:
+    from PIL import Image
+
+    from geoinstant.imageio import extract_taken, parse_taken
+
+    assert parse_taken("2019:06:12 14:05:33") == "2019-06-12T14:05:33"
+    assert parse_taken("2019-06-12T14:05:33.000Z") == "2019-06-12T14:05:33"
+    assert parse_taken("0000:00:00 00:00:00") is None and parse_taken(None) is None
+
+    exif = Image.Exif()
+    exif.get_ifd(0x8769)[36867] = "2018:08:03 17:45:10"  # DateTimeOriginal, as old digital cameras write it
+    camera = jpeg_bytes(synthetic_photo(11), exif)
+    assert extract_taken(camera, 50_000_000) == "2018-08-03T17:45:10"
+
+    with TestClient(create_app(settings_for(settings, tmp_path))) as c:
+        up = c.post(
+            "/v1/archive/photos",
+            files=[
+                ("files", ("cam.jpg", camera, "image/jpeg")),
+                ("files", ("shrunk.jpg", jpeg_bytes(synthetic_photo(12)), "image/jpeg")),
+            ],
+            data={"gps": '[null, {"taken": "2018-08-03T19:00:00"}]'},  # the browser read the second one's date
+            headers=TOKEN,
+        ).json()
+        taken = {p["filename"]: p["taken_at"] for p in wait_done(c, 2)}
+        assert up["added"] and taken == {"cam.jpg": "2018-08-03T17:45:10", "shrunk.jpg": "2018-08-03T19:00:00"}

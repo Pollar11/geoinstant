@@ -180,6 +180,31 @@ def _xmp_gps(data: bytes) -> GpsFix | None:
     return GpsFix(round(lat, 7), round(lon, 7), None, "xmp", None)
 
 
+_TAKEN = re.compile(r"^(\d{4})[:-](\d{2})[:-](\d{2})[ T](\d{2}):(\d{2}):(\d{2})")
+
+
+def parse_taken(raw: object) -> str | None:
+    """Camera clock time as a naive ISO string ('2019-06-12T14:05:33'), or None if unusable."""
+    m = _TAKEN.match(str(raw or "").strip())
+    if not m:
+        return None
+    try:
+        y, mo, d, h, mi, sec = (int(x) for x in m.groups())
+        dt = datetime(y, mo, d, h, mi, sec)
+    except ValueError:
+        return None
+    return dt.isoformat() if 1900 <= dt.year <= 2100 else None
+
+
+def extract_taken(data: bytes, max_pixels: int) -> str | None:
+    """When the photo was taken, from EXIF (digital cameras have a clock even without GPS)."""
+    try:
+        exif = open_image(data, max_pixels).getexif()
+        return parse_taken(exif.get_ifd(0x8769).get(36867) or exif.get(306))  # DateTimeOriginal, else DateTime
+    except Exception:  # noqa: BLE001 - no usable EXIF
+        return None
+
+
 def extract_gps(data: bytes, max_pixels: int) -> GpsFix | None:
     """Return the embedded GPS fix, if any. Reads headers only (no pixel decode)."""
     try:

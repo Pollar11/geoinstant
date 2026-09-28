@@ -34,10 +34,11 @@ type Props = {
   error: string | null;
   onStart?: (context: string) => void;
   defaultContext?: string;
+  street?: "searching" | "found" | "not_found" | null; // the street search that follows up on the lead
 };
 
 /** Rainbolt-style investigation: live narration, then "This photo was taken at …" and then & now. */
-export function InvestigationPanel({ steps, investigation, running, error, onStart, defaultContext = "" }: Props) {
+export function InvestigationPanel({ steps, investigation, running, error, onStart, defaultContext = "", street = null }: Props) {
   const [context, setContext] = useState(defaultContext);
   const report = investigation?.report ?? null;
   const shown = investigation?.steps ?? steps;
@@ -77,11 +78,22 @@ export function InvestigationPanel({ steps, investigation, running, error, onSta
             )}
           </div>
         )}
-        {investigation && !running && !(report && isPinned(report)) && (
+        {investigation && !running && !(report && isPinned(report)) && street === "found" && report?.place_name && (
+          <p>
+            <span className="text-muted-foreground">Lead from the clues: </span>
+            {report.place_name}
+            <span className="text-muted-foreground"> · the street match above pinned the exact spot.</span>
+          </p>
+        )}
+        {investigation && !running && !(report && isPinned(report)) && street !== "found" && (
           <div className="space-y-2 rounded-lg border p-3">
-            <p className="font-semibold">Exact location not found in this photo</p>
+            <p className="font-semibold">
+              {street === "searching" ? "Searching street photos for the exact spot…" : "Exact location not found in this photo"}
+            </p>
             <p className="text-muted-foreground">
-              Nothing visible pins it to a street or building (no readable name, sign, address or known landmark).
+              {street === "searching"
+                ? "The clues narrowed it down to the lead below; every street photo around it is being compared with yours."
+                : "Nothing visible pins it to a street or building (no readable name, sign, address or known landmark)."}
             </p>
             {report && report.place_name && (
               <p>
@@ -90,10 +102,12 @@ export function InvestigationPanel({ steps, investigation, running, error, onSta
                 {report.summary && <span className="text-muted-foreground"> · {report.summary}</span>}
               </p>
             )}
-            <p className="text-muted-foreground">
-              To pin it: link it with an outdoor photo from the same day, add what the family remembers below, or use the
-              mountain skyline match if mountains are visible.
-            </p>
+            {street !== "searching" && (
+              <p className="text-muted-foreground">
+                To pin it: add what you remember below (place, year) and investigate again, or use the mountain skyline match if
+                mountains are visible.
+              </p>
+            )}
           </div>
         )}
         {error && <p className="text-danger">{error}</p>}

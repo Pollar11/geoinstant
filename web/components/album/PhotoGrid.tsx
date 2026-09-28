@@ -55,7 +55,11 @@ export function PhotoGrid({
                   )
                 )}
                 <div className="flex flex-wrap gap-1 text-muted-foreground">
-                  {p.era && <span className="rounded bg-muted px-1">{p.era}</span>}
+                  {p.taken_at ? (
+                    <span className="rounded bg-muted px-1">{p.taken_at.slice(0, 10)}</span>
+                  ) : (
+                    p.era && <span className="rounded bg-muted px-1">{p.era}</span>
+                  )}
                   {p.group_name && <span className="truncate rounded bg-violet-500/15 px-1 text-violet-700 dark:text-violet-300">{p.group_name}</span>}
                 </div>
               </div>

@@ -14,7 +14,7 @@ from starlette.datastructures import UploadFile
 
 from ..config import Settings
 from ..geocode import PlaceHit
-from ..imageio import GpsFix, ImageError, content_hash, extract_gps
+from ..imageio import GpsFix, ImageError, content_hash, extract_gps, extract_taken, parse_taken
 from ..streetmatch.service import Job, StreetMatchService
 from .service import ArchiveService, Group, PhotoDetail, PhotoSummary
 
@@ -51,6 +51,11 @@ def _client_fix(items: list[object], i: int) -> GpsFix | None:
     return GpsFix(round(lat, 7), round(lon, 7), None, "exif", str(taken)[:40] if taken else None)
 
 
+def _client_taken(items: list[object], i: int) -> str | None:
+    g = items[i] if i < len(items) else None
+    return parse_taken(g.get("taken")) if isinstance(g, dict) else None
+
+
 class StreetMatchStart(BaseModel):
     bbox: tuple[float, float, float, float]  # south, west, north, east
 
@@ -76,7 +81,7 @@ def router(settings: Settings) -> APIRouter:
     @r.post("/photos", response_model=UploadResult)
     async def upload(request: Request, svc: Svc) -> UploadResult:
         form = await request.form(max_files=settings.archive_max_files_per_upload, max_fields=4)
-        # Optional GPS read on the device (browsers strip EXIF when they shrink photos): [null | {lat, lon, taken}].
+        # Optional GPS read on the device (browsers strip EXIF when they shrink photos): [null | {lat?, lon?, taken?}].
         try:
             client_gps = json.loads(str(form.get("gps") or "[]"))
         except ValueError:
@@ -93,7 +98,8 @@ def router(settings: Settings) -> APIRouter:
                 continue
             try:
                 gps = await asyncio.to_thread(extract_gps, data, settings.max_pixels) or _client_fix(client_gps, i)
-                pid = await asyncio.to_thread(svc.store.add, name, data, gps, content_hash(data), settings.max_pixels)
+                taken = await asyncio.to_thread(extract_taken, data, settings.max_pixels) or _client_taken(client_gps, i)
+                pid = await asyncio.to_thread(svc.store.add, name, data, gps, content_hash(data), settings.max_pixels, taken)
             except ImageError as e:
                 skipped.append(f"{name}: {e}")
                 continue
@@ -129,6 +135,8 @@ def router(settings: Settings) -> APIRouter:
         if "group_id" in fields and fields["group_id"] and fields["group_id"] not in svc.store.groups():
             raise HTTPException(422, "No such group")
         await asyncio.to_thread(svc.store.update, pid, fields)
+        if fields.get("user_lat") is not None:
+            svc.spawn(svc.wake_same_day(pid))  # photos from the same day now have a lead
         d = await asyncio.to_thread(svc.detail, pid)
         assert d is not None
         return d
@@ -158,6 +166,8 @@ def router(settings: Settings) -> APIRouter:
         async def save(job: Job) -> None:
             if job.result:
                 await asyncio.to_thread(svc.store.set_streetmatch, pid, job.result.model_dump(mode="json"))
+                if job.result.verified:
+                    await svc.wake_same_day(pid)
 
         try:
             return sm.start(img, body.bbox, pid, save)

@@ -66,6 +66,7 @@ class Row:
     investigation: dict[str, Any] | None = None
     streetmatch: dict[str, Any] | None = None
     skyline: dict[str, Any] | None = None
+    taken_at: str | None = None  # camera clock, naive ISO
 
 
 class ArchiveStore:
@@ -79,7 +80,7 @@ class ArchiveStore:
         with self._lock:
             self._db.executescript(SCHEMA)
             cols = {r[1] for r in self._db.execute("PRAGMA table_info(photos)")}
-            for col in ("investigation", "streetmatch", "skyline"):  # added after the first release
+            for col in ("investigation", "streetmatch", "skyline", "taken_at"):  # added after the first release
                 if col not in cols:
                     self._db.execute(f"ALTER TABLE photos ADD COLUMN {col} TEXT")
             self._db.execute("UPDATE photos SET status='queued' WHERE status='analyzing'")  # resume after restart
@@ -89,7 +90,7 @@ class ArchiveStore:
     def image_path(self, pid: str, size: str) -> Path:
         return self.root / ("thumbs" if size == "thumb" else "photos") / f"{pid}.jpg"
 
-    def add(self, filename: str, data: bytes, gps: GpsFix | None, sha256: str, max_pixels: int) -> str:
+    def add(self, filename: str, data: bytes, gps: GpsFix | None, sha256: str, max_pixels: int, taken: str | None = None) -> str:
         img = ImageOps.exif_transpose(open_image(data, max_pixels)).convert("RGB")
         pid = uuid.uuid4().hex[:16]
         full = img.copy()
@@ -101,8 +102,9 @@ class ArchiveStore:
         gps_json = json.dumps(gps.__dict__) if gps else None
         with self._lock:
             self._db.execute(
-                "INSERT INTO photos (id, filename, added_at, sha256, width, height, status, gps) VALUES (?,?,?,?,?,?,?,?)",
-                (pid, filename[:200], now(), sha256, full.width, full.height, "queued", gps_json),
+                "INSERT INTO photos (id, filename, added_at, sha256, width, height, status, gps, taken_at)"
+                " VALUES (?,?,?,?,?,?,?,?,?)",
+                (pid, filename[:200], now(), sha256, full.width, full.height, "queued", gps_json, taken),
             )
             self._db.commit()
         return pid
@@ -131,6 +133,7 @@ class ArchiveStore:
             investigation=json.loads(r["investigation"]) if r["investigation"] else None,
             streetmatch=json.loads(r["streetmatch"]) if r["streetmatch"] else None,
             skyline=json.loads(r["skyline"]) if r["skyline"] else None,
+            taken_at=r["taken_at"],
         )
 
     def get(self, pid: str) -> Row | None:

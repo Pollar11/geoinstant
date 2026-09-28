@@ -7,22 +7,21 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import type { BBox } from "@/lib/api-types";
-import type { StreetJob, StreetMatch, StreetResult } from "@/lib/archive";
+import type { BBox, StreetJob, StreetMatch, StreetResult } from "@/lib/api-types";
 import { cn } from "@/lib/utils";
 
 export const STREET_MAX_KM2 = 6;
 
 type Props = {
   photoUrl: string;
-  bounds: BBox | null;
+  bounds?: BBox | null;
   job: StreetJob | null;
   result: StreetResult | null;
   error: string | null;
   selected: number;
-  onSearch: () => void;
+  onSearch?: () => void; // omit for the automatic search (no map-area button)
   onSelect: (i: number) => void;
-  onUse: (m: StreetMatch) => void;
+  onUse?: (m: StreetMatch) => void;
 };
 
 /** GeoSpy-style: compare the photo with every street photo in the map view; a verified match is the exact spot. */
@@ -40,18 +39,26 @@ export function StreetMatchPanel(p: Props) {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3 text-sm">
-        <p className="text-muted-foreground">
-          Zoom the map to the area you suspect (a few streets or a village, up to {STREET_MAX_KM2} km²). Every street-level
-          photo there is compared with yours, window by window.
-        </p>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button size="sm" onClick={p.onSearch} disabled={!p.bounds || tooBig || running}>
-            {running ? <Loader2 className="animate-spin" /> : <ScanSearch />} Search this map area
-          </Button>
-          <span className={cn("text-xs", tooBig ? "text-danger" : "text-muted-foreground")}>
-            {area < 10 ? area.toFixed(1) : Math.round(area).toLocaleString()} km² {tooBig && "· zoom in"}
-          </span>
-        </div>
+        {p.onSearch ? (
+          <>
+            <p className="text-muted-foreground">
+              Zoom the map to the area you suspect (a few streets or a village, up to {STREET_MAX_KM2} km²). Every
+              street-level photo there is compared with yours, window by window.
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button size="sm" onClick={p.onSearch} disabled={!p.bounds || tooBig || running}>
+                {running ? <Loader2 className="animate-spin" /> : <ScanSearch />} Search this map area
+              </Button>
+              <span className={cn("text-xs", tooBig ? "text-danger" : "text-muted-foreground")}>
+                {area < 10 ? area.toFixed(1) : Math.round(area).toLocaleString()} km² {tooBig && "· zoom in"}
+              </span>
+            </div>
+          </>
+        ) : (
+          <p className="text-muted-foreground">
+            Every street-level photo around the investigation&apos;s lead is compared with yours, window by window.
+          </p>
+        )}
 
         {running && p.job && (
           <div className="space-y-1">
@@ -95,9 +102,11 @@ export function StreetMatchPanel(p: Props) {
                   </figure>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <Button size="sm" onClick={() => p.onUse(m)}>
-                    <Check /> Use this spot
-                  </Button>
+                  {p.onUse && (
+                    <Button size="sm" onClick={() => p.onUse?.(m)}>
+                      <Check /> Use this spot
+                    </Button>
+                  )}
                   <a href={m.page_url || `https://www.mapillary.com/app/?pKey=${m.image_id}&focus=photo`} target="_blank" rel="noreferrer">
                     <Button size="sm" variant="outline">
                       <ExternalLink /> Look around here
