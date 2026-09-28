@@ -92,6 +92,7 @@ The VLM (2–8 s) streams later as `refined`. Late stages are dropped at the dea
 - **Inference:** `inference/Dockerfile` (GPU: `--build-arg BASE=nvcr.io/nvidia/tensorrt:24.08-py3 --build-arg ORT=onnxruntime-gpu`), or `modal deploy modal_app.py`.
 - **Web:** Vercel (root `web/`) or `web/Dockerfile`. Set `INFERENCE_URL` and `INFERENCE_API_KEY`.
 - **Keys:** set `GEOINSTANT_PROXY_API_KEYS` (web) and `GEOINSTANT_API_KEYS` (API clients). Use a Redis or edge rate limiter when running multiple replicas.
+- **Album:** SQLite, a background queue and in-memory street-match jobs, so run it as one instance (`docker compose`) with the `archive` and `cache` volumes. Don't enable it on the autoscaled Modal deployment.
 
 ## Feedback loop
 

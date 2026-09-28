@@ -1,6 +1,6 @@
 """Export MegaLoc (DINOv2 transformer + attention aggregation, trained for place recognition) to ONNX.
 
-    pip install torch onnx && python scripts/export_vpr.py   # → artifacts/vpr_encoder.onnx
+pip install torch onnx && python scripts/export_vpr.py   # → artifacts/vpr_encoder.onnx
 """
 
 from __future__ import annotations

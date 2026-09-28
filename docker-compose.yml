@@ -10,10 +10,14 @@ services:
       GEOINSTANT_CORS_ORIGINS: '["http://localhost:3300"]'
       GEOINSTANT_ARCHIVE_TOKEN: ${ARCHIVE_TOKEN:-change-me-archive-token}
       GEOINSTANT_MAPILLARY_TOKEN: ${MAPILLARY_TOKEN:-}
+      # Downloaded terrain and street-photo descriptors (safe to delete).
+      GEOINSTANT_DEM_DIR: /cache/dem
+      GEOINSTANT_STREETMATCH_DIR: /cache/streetmatch
     volumes:
       - ./inference/artifacts:/artifacts
       - feedback:/feedback
       - archive:/archive
+      - cache:/cache
     # GPU hosts: uncomment and build with the GPU args in inference/Dockerfile.
     # deploy:
     #   resources:
@@ -35,3 +39,4 @@ services:
 volumes:
   feedback:
   archive:
+  cache:

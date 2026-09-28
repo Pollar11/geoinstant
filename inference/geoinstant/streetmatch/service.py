@@ -252,7 +252,7 @@ class StreetMatchService:
         if verified and best and self.overpass_url:
             try:
                 building = await facing_building(self._http, self.overpass_url, best.latitude, best.longitude, best.heading)
-            except Exception:  # noqa: BLE001 - the spot stands without an address
+            except (httpx.HTTPError, ValueError, KeyError):  # the spot stands without an address
                 log.warning("address lookup failed", exc_info=True)
         if verified and best:
             msg = f"Same place: {best.inliers} matching points with a street photo from {best.captured_at or 'an unknown date'}."
