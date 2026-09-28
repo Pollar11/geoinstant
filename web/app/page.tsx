@@ -1,6 +1,7 @@
 "use client";
 
 import { AlertTriangle, RotateCcw } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Dropzone } from "@/components/Dropzone";
@@ -9,6 +10,7 @@ import { LocationMap } from "@/components/LocationMap";
 import { PhotoWithRegions } from "@/components/PhotoWithRegions";
 import { PipelineTimeline } from "@/components/PipelineTimeline";
 import { ResultPanel, ResultSkeleton } from "@/components/ResultPanel";
+import { ClueBoard } from "@/components/ClueBoard";
 import { SkylinePanel } from "@/components/SkylinePanel";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -123,14 +125,19 @@ export default function Home() {
             <p className="hidden text-xs text-muted-foreground sm:block">Where was this photo taken?</p>
           </div>
         </div>
-        {!idle && (
-          <div className="flex shrink-0 gap-1 sm:gap-2">
+        <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+          <Link href="/album" className="rounded-md px-3 py-1.5 text-sm font-medium hover:bg-muted">
+            Album
+          </Link>
+          {!idle && (
+            <>
             <Dropzone onFile={start} compact />
-            <Button variant="ghost" size="icon" aria-label="Start over" onClick={startOver}>
-              <RotateCcw />
-            </Button>
-          </div>
-        )}
+              <Button variant="ghost" size="icon" aria-label="Start over" onClick={startOver}>
+                <RotateCcw />
+              </Button>
+            </>
+          )}
+        </div>
       </header>
 
       {idle ? (
@@ -209,6 +216,7 @@ export default function Home() {
               />
             )}
             {result ? <ResultPanel result={result} refining={refining} onVerdict={verdict} /> : !error && <ResultSkeleton />}
+            {result?.analysis && <ClueBoard analysis={result.analysis} />}
           </div>
         </div>
       )}

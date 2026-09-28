@@ -15,6 +15,9 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from starlette.datastructures import UploadFile
 from starlette.formparsers import MultiPartParser
 
+from .archive.api import router as archive_router
+from .archive.service import ArchiveService
+from .archive.store import ArchiveStore
 from .config import Settings, get_settings
 from .imageio import ImageError, decode
 from .pipeline import Engine
@@ -50,8 +53,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         settings.skyline_max_area_km2,
         settings.skyline_max_km,
     )
+    app.state.archive = None
+    if settings.archive_token:
+        app.state.archive = ArchiveService(
+            ArchiveStore(settings.archive_dir), app.state.engine, settings.archive_people_policy, settings.archive_concurrency
+        )
+        app.state.archive.start()
     log.info("GeoInstant ready (mode=%s) %s", app.state.engine.mode, app.state.engine.models)
     yield
+    if app.state.archive:
+        await app.state.archive.stop()
     app.state.engine.pool.shutdown(wait=False, cancel_futures=True)
 
 
@@ -65,8 +76,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
-        allow_methods=["POST", "GET"],
-        allow_headers=["Content-Type", "X-API-Key"],
+        allow_methods=["POST", "GET", "PATCH", "DELETE"],
+        allow_headers=["Content-Type", "X-API-Key", "X-Archive-Token"],
     )
 
     def matches(supplied: str, keys: list[str]) -> bool:
@@ -122,6 +133,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if len(data) > settings.max_upload_bytes:
             raise HTTPException(413, "Image is too large")
         return data
+
+    app.include_router(archive_router(settings))
 
     VlmParam = Query(None, pattern="^(off|enrich|blocking)$", description="Override the VLM mode for this request")
 

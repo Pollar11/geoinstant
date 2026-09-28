@@ -30,7 +30,7 @@ export function targetSize(width: number, height: number, maxEdge = MAX_EDGE): {
   return { width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)) };
 }
 
-async function downscale(file: Blob): Promise<{ blob: Blob; width: number; height: number } | null> {
+export async function downscale(file: Blob, maxEdge = MAX_EDGE): Promise<{ blob: Blob; width: number; height: number } | null> {
   let bitmap: ImageBitmap;
   try {
     // imageOrientation "from-image" applies the EXIF rotation before we drop the metadata.
@@ -38,7 +38,7 @@ async function downscale(file: Blob): Promise<{ blob: Blob; width: number; heigh
   } catch {
     return null; // e.g. HEIC in Chrome/Firefox
   }
-  const { width, height } = targetSize(bitmap.width, bitmap.height);
+  const { width, height } = targetSize(bitmap.width, bitmap.height, maxEdge);
   let blob: Blob | null = null;
   if (typeof OffscreenCanvas !== "undefined") {
     const canvas = new OffscreenCanvas(width, height);

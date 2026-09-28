@@ -35,6 +35,20 @@ python scripts/build_index.py --manifest train.csv --faiss
 python scripts/evaluate.py --manifest test.csv
 ```
 
+## Family album
+
+The album lives at `/album` and is protected by a password. Drop in a whole folder and every photo gets:
+
+- A clue board: scene, decade, clues and top 3 guesses (needs `ANTHROPIC_API_KEY`).
+- GPS, if the file has it.
+- The skyline tool, for photos with mountains.
+
+Select photos from the same trip and click **Link as same place/event**; once one is located, the rest inherit it. Click the map to set a location yourself.
+
+```bash
+ARCHIVE_PASSWORD=… ANTHROPIC_API_KEY=… docker compose up --build   # http://localhost:3300/album
+```
+
 ## Mountain skyline matching
 
 For photos with mountains in the background:

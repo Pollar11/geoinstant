@@ -49,6 +49,26 @@ export const RegionBox = z.object({
 });
 export type RegionBox = z.infer<typeof RegionBox>;
 
+export const Analysis = z.object({
+  scene: z.string(),
+  era: z.string(),
+  model: z.string(),
+  clues: z.array(
+    z.object({ category: z.string(), clue: z.string(), implies: z.string(), strength: z.enum(["strong", "medium", "weak"]) }),
+  ),
+  guesses: z.array(
+    z.object({
+      label: z.string(),
+      country_code: z.string(),
+      latitude: z.number().nullable(),
+      longitude: z.number().nullable(),
+      probability: z.number(),
+      radius_km: z.number(),
+    }),
+  ),
+});
+export type Analysis = z.infer<typeof Analysis>;
+
 export const LocateResult = z.object({
   request_id: z.string(),
   stage: z.enum(["partial", "final", "refined"]),
@@ -70,6 +90,7 @@ export const LocateResult = z.object({
   models: z.record(z.string(), z.string()),
   privacy: z.object({ coarsened: z.boolean(), reason: z.string().nullable(), stored: z.boolean() }),
   cached: z.boolean(),
+  analysis: Analysis.nullable().optional(),
 });
 export type LocateResult = z.infer<typeof LocateResult>;
 

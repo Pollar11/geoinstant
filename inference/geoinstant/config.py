@@ -77,6 +77,13 @@ class Settings(BaseSettings):
     skyline_max_area_km2: float = 5000.0  # on-demand search area limit
     skyline_max_km: float = 40.0  # how far to render terrain
 
+    # --- Private photo archive (album) ------------------------------------------------------
+    archive_dir: Path = Path("./archive")
+    archive_token: str = ""  # shared secret with the web app; empty = archive disabled
+    archive_people_policy: Literal["coarsen", "off"] = "off"  # your own family photos: full precision
+    archive_concurrency: int = 3
+    archive_max_files_per_upload: int = 100
+
     # --- Feedback / continuous learning ----------------------------------------------------
     feedback_dir: Path = Path("./feedback")
     result_cache_size: int = 2048

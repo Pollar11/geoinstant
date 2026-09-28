@@ -8,9 +8,11 @@ services:
       GEOINSTANT_VLM_MODE: ${GEOINSTANT_VLM_MODE:-enrich}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       GEOINSTANT_CORS_ORIGINS: '["http://localhost:3300"]'
+      GEOINSTANT_ARCHIVE_TOKEN: ${ARCHIVE_TOKEN:-change-me-archive-token}
     volumes:
       - ./inference/artifacts:/artifacts
       - feedback:/feedback
+      - archive:/archive
     # GPU hosts: uncomment and build with the GPU args in inference/Dockerfile.
     # deploy:
     #   resources:
@@ -23,8 +25,12 @@ services:
     environment:
       INFERENCE_URL: http://inference:8000
       INFERENCE_API_KEY: ${GEOINSTANT_PROXY_KEY:-change-me-proxy-key}
+      INFERENCE_ARCHIVE_TOKEN: ${ARCHIVE_TOKEN:-change-me-archive-token}
+      ARCHIVE_PASSWORD: ${ARCHIVE_PASSWORD:?set ARCHIVE_PASSWORD for the album login}
+      SESSION_SECRET: ${SESSION_SECRET:-change-me-session-secret}
     ports: ["3300:3300"]
     depends_on: [inference]
 
 volumes:
   feedback:
+  archive:

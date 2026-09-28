@@ -58,6 +58,32 @@ class Privacy(BaseModel):
     stored: bool = False
 
 
+class Clue(BaseModel):
+    category: str
+    clue: str
+    implies: str
+    strength: Literal["strong", "medium", "weak"]
+
+
+class Guess(BaseModel):
+    label: str
+    country_code: str
+    latitude: float | None
+    longitude: float | None
+    probability: float
+    radius_km: float
+
+
+class Analysis(BaseModel):
+    """The visual-reasoning clue board (present when the VLM stage answered)."""
+
+    scene: str
+    era: str
+    model: str
+    clues: list[Clue] = []
+    guesses: list[Guess] = []
+
+
 class LocateResult(BaseModel):
     request_id: str
     stage: ResultStage
@@ -79,6 +105,7 @@ class LocateResult(BaseModel):
     models: dict[str, str] = {}
     privacy: Privacy = Privacy()
     cached: bool = False
+    analysis: Analysis | None = None
 
 
 # ---- Streaming events (text/event-stream, one JSON object per `data:` line) ------------------

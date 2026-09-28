@@ -19,51 +19,72 @@ Effort = Literal["low", "medium", "high"]
 
 log = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = """You are the reasoning stage of an image geolocation system. You see one photo and \
-estimate where it was taken from the environment only: vegetation, terrain, soil, sky and sun \
-angle, architecture, road markings, signs and their script/language, licence-plate formats, \
-utility poles, bollards, vehicles, shop names and any other visible text.
+SYSTEM_PROMPT = """You are an expert photo geolocator (GeoGuessr-champion level). You see one photo, often an \
+old family snapshot, and work out where it was taken from what is visible.
+
+Work through every clue that applies, like a pro narrating a round:
+- Text: language, script, spelling, shop and brand names, menus, prices, currency, phone formats, \
+licence plates, street and road signs, newspapers, calendars, posters.
+- Indoors (homes, bars, restaurants): power sockets and plugs, light switches, radiators and \
+heaters, window and door styles, tiles and floors, furniture and decor, appliances, bottle and \
+packaging labels, beer taps, ashtrays, crockery, TV and electronics.
+- Beaches and coasts: sand and rock colour, water colour, waves, beach umbrellas and loungers, \
+lifeguard towers, flags, palm and tree species, coastline shape, islands or mountains on the horizon.
+- Rural and streets: crops, fences, barns, roof shapes and materials, soil colour, trees, \
+utility poles, road markings, bollards, vehicles, driving side, architecture.
+- Mountains and landscape: ridge shapes, rock type, snow line, vegetation zone.
+- Light: sun height and shadow direction (hemisphere, latitude, season).
+- Era: clothing, hairstyles, cars, photo print style. Estimate the decade.
 
 Rules:
-- Report only what is visible. List each clue you relied on and what it implies.
-- Be calibrated: confidence is your probability that the true location lies within radius_km \
-of your coordinates. A generic beach or forest deserves a large radius and low confidence.
-- Leave latitude/longitude null if you cannot do better than a continent.
-- Never identify people or use faces as evidence. Set people_are_main_subject to true when \
-people are the main subject of the photo."""
+- Only use what is visible. Never identify people or use faces as evidence.
+- Give up to 3 candidate places with calibrated probabilities (they may sum to less than 1). \
+Each radius_km should cover the place with ~70% certainty: a generic beach deserves thousands of km.
+- Leave latitude/longitude null for a candidate you can only place at country level or coarser.
+- strength: how specific each clue is (strong = points to one country or region; weak = generic)."""
 
 USER_PROMPT = "Where was this photo taken? Answer with the JSON schema."
 
+SCENES = ["home", "bar_restaurant", "other_indoor", "beach_coast", "mountain", "rural", "urban", "other"]
+CATEGORIES = ["text", "architecture", "interior", "infrastructure", "vehicles", "nature", "terrain", "light", "era", "other"]
+
+_NUM_OR_NULL = {"anyOf": [{"type": "number"}, {"type": "null"}]}
 RESPONSE_SCHEMA: dict[str, object] = {
     "type": "object",
     "additionalProperties": False,
-    "required": [
-        "country_code",
-        "region",
-        "city",
-        "latitude",
-        "longitude",
-        "confidence",
-        "radius_km",
-        "clues",
-        "visible_text",
-        "people_are_main_subject",
-    ],
+    "required": ["scene", "era", "clues", "candidates", "visible_text", "people_are_main_subject"],
     "properties": {
-        "country_code": {"type": "string", "description": "ISO 3166-1 alpha-2, or empty if unknown"},
-        "region": {"type": "string"},
-        "city": {"type": "string"},
-        "latitude": {"anyOf": [{"type": "number"}, {"type": "null"}]},
-        "longitude": {"anyOf": [{"type": "number"}, {"type": "null"}]},
-        "confidence": {"type": "number", "description": "0..1"},
-        "radius_km": {"type": "number"},
+        "scene": {"type": "string", "enum": SCENES},
+        "era": {"type": "string", "description": "e.g. '1970s', or '' if unclear"},
         "clues": {
             "type": "array",
             "items": {
                 "type": "object",
                 "additionalProperties": False,
-                "required": ["clue", "implies"],
-                "properties": {"clue": {"type": "string"}, "implies": {"type": "string"}},
+                "required": ["category", "clue", "implies", "strength"],
+                "properties": {
+                    "category": {"type": "string", "enum": CATEGORIES},
+                    "clue": {"type": "string"},
+                    "implies": {"type": "string"},
+                    "strength": {"type": "string", "enum": ["strong", "medium", "weak"]},
+                },
+            },
+        },
+        "candidates": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["country_code", "region", "city", "latitude", "longitude", "probability", "radius_km"],
+                "properties": {
+                    "country_code": {"type": "string", "description": "ISO 3166-1 alpha-2, or '' if unknown"},
+                    "region": {"type": "string"},
+                    "city": {"type": "string"},
+                    "latitude": _NUM_OR_NULL,
+                    "longitude": _NUM_OR_NULL,
+                    "probability": {"type": "number", "description": "0..1"},
+                    "radius_km": {"type": "number"},
+                },
             },
         },
         "visible_text": {"type": "array", "items": {"type": "string"}},
@@ -73,19 +94,31 @@ RESPONSE_SCHEMA: dict[str, object] = {
 
 
 class VlmClue(BaseModel):
+    category: str = "other"
     clue: str
     implies: str
+    strength: Literal["strong", "medium", "weak"] = "medium"
 
 
-class VlmAnswer(BaseModel):
+class VlmCandidate(BaseModel):
     country_code: str = ""
     region: str = ""
     city: str = ""
     latitude: float | None = None
     longitude: float | None = None
-    confidence: float = 0.0
+    probability: float = 0.0
     radius_km: float = 1000.0
+
+    @property
+    def label(self) -> str:
+        return ", ".join(p for p in (self.city, self.region, self.country_code) if p) or "unknown"
+
+
+class VlmAnswer(BaseModel):
+    scene: str = "other"
+    era: str = ""
     clues: list[VlmClue] = []
+    candidates: list[VlmCandidate] = []
     visible_text: list[str] = []
     people_are_main_subject: bool = False
 
@@ -172,8 +205,10 @@ class ClaudeVlm:
         except (json.JSONDecodeError, ValidationError):
             log.warning("VLM returned unparseable output (stop_reason=%s)", response.stop_reason)
             return None
-        answer.confidence = min(max(answer.confidence, 0.0), 1.0)
-        answer.radius_km = min(max(answer.radius_km, 0.05), 5000.0)
+        for c in answer.candidates:
+            c.probability = min(max(c.probability, 0.0), 1.0)
+            c.radius_km = min(max(c.radius_km, 0.05), 5000.0)
+        answer.candidates = sorted(answer.candidates, key=lambda c: -c.probability)[:3]
         return VlmResult(answer=answer, model=response.model)
 
 
