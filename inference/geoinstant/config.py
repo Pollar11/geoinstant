@@ -6,7 +6,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DATA_DIR = Path(__file__).parent / "data"
@@ -73,6 +73,7 @@ class Settings(BaseSettings):
     api_keys: list[str] = Field(default_factory=list)  # empty = open (put the web proxy in front)
     # Proxy keys (the web app): rate-limited per end user via X-Forwarded-For.
     proxy_api_keys: list[str] = Field(default_factory=list)
+    proxy_api_key: str = ""  # one plain key, for hosts that can't write a JSON list (e.g. Render)
     rate_limit_per_minute: int = 20
     rate_limit_burst: int = 10
     trusted_proxy_hops: int = 1  # how many X-Forwarded-For hops to trust
@@ -109,6 +110,12 @@ class Settings(BaseSettings):
     feedback_dir: Path = Path("./feedback")
     result_cache_size: int = 2048
     result_cache_ttl_s: int = 900
+
+    @model_validator(mode="after")
+    def _merge_single_key(self) -> Settings:
+        if self.proxy_api_key and self.proxy_api_key not in self.proxy_api_keys:
+            self.proxy_api_keys = [*self.proxy_api_keys, self.proxy_api_key]
+        return self
 
     def artifact(self, name: str) -> Path:
         return self.artifacts_dir / name

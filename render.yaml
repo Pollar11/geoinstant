@@ -1,0 +1,64 @@
+# One-click deploy on Render: New → Blueprint → pick this repo.
+# You'll be asked for ANTHROPIC_API_KEY, MAPILLARY token (optional) and the album password.
+services:
+  # Location engine: private (only the website can reach it), with a disk for the album and caches.
+  - type: pserv
+    name: geoinstant-engine
+    runtime: docker
+    dockerContext: ./inference
+    dockerfilePath: ./inference/Dockerfile
+    plan: standard # 2 GB RAM: street match downloads and compares thousands of photos
+    disk:
+      name: data
+      mountPath: /data
+      sizeGB: 10
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: GEOINSTANT_MAPILLARY_TOKEN
+        sync: false
+      - key: GEOINSTANT_ARCHIVE_TOKEN
+        generateValue: true
+      - key: GEOINSTANT_PROXY_API_KEY
+        generateValue: true
+      - key: GEOINSTANT_VLM_MODE
+        value: enrich
+      - key: GEOINSTANT_ARCHIVE_DIR
+        value: /data/archive
+      - key: GEOINSTANT_FEEDBACK_DIR
+        value: /data/feedback
+      - key: GEOINSTANT_DEM_DIR
+        value: /data/cache/dem
+      - key: GEOINSTANT_STREETMATCH_DIR
+        value: /data/cache/streetmatch
+      - key: GEOINSTANT_ARTIFACTS_DIR
+        value: /data/artifacts # put model files here (vpr_encoder.onnx, matcher.onnx, …)
+
+  # Website (the only public part).
+  - type: web
+    name: geoinstant
+    runtime: docker
+    dockerContext: ./web
+    dockerfilePath: ./web/Dockerfile
+    plan: starter
+    healthCheckPath: /
+    envVars:
+      - key: ARCHIVE_PASSWORD
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: INFERENCE_HOSTPORT
+        fromService:
+          type: pserv
+          name: geoinstant-engine
+          property: hostport
+      - key: INFERENCE_API_KEY
+        fromService:
+          type: pserv
+          name: geoinstant-engine
+          envVarKey: GEOINSTANT_PROXY_API_KEY
+      - key: INFERENCE_ARCHIVE_TOKEN
+        fromService:
+          type: pserv
+          name: geoinstant-engine
+          envVarKey: GEOINSTANT_ARCHIVE_TOKEN
