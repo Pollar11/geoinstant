@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Check, MapPin, RefreshCw, Trash2, X } from "lucide-react";
+import { ArrowLeft, Check, Loader2, MapPin, RefreshCw, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { ClueBoard } from "@/components/ClueBoard";
@@ -73,9 +73,29 @@ export function PhotoDetailView(p: Props) {
           ) : (
             photo.status === "done" && (
               <div className="space-y-1">
-                <p className="font-semibold">Exact location not found yet</p>
+                <p className="font-semibold">{photo.searching ? "Searching for the exact spot…" : "Exact location not found yet"}</p>
                 {photo.lead && <p className="text-muted-foreground">Lead: {photo.lead}</p>}
-                <p className="text-muted-foreground">Link it to a photo from the same day, add what you remember in the notes, or set it yourself.</p>
+                {photo.searching ? (
+                  <p className="flex items-center gap-2 text-muted-foreground">
+                    <Loader2 className="size-4 animate-spin" /> {photo.searching}
+                  </p>
+                ) : (
+                  <>
+                    {photo.streetmatch && !photo.streetmatch.verified && (
+                      <p className="text-muted-foreground">Street photos around the lead: {photo.streetmatch.message}</p>
+                    )}
+                    {photo.skyline && !photo.skyline.pinned && (
+                      <p className="text-muted-foreground">
+                        Skyline around the lead: {photo.skyline.message || `no clear match (${Math.round(photo.skyline.confidence * 100)}% confident)`}
+                      </p>
+                    )}
+                    <p className="text-muted-foreground">
+                      {photo.lead
+                        ? "Add what you remember in the notes and analyse again, or search a different map area below."
+                        : "Nothing in this photo narrows it to a town yet. Add what the family remembers (place, year) and analyse again."}
+                    </p>
+                  </>
+                )}
               </div>
             )
           )}

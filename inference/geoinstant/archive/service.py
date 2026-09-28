@@ -14,7 +14,9 @@ from ..imageio import GpsFix
 from ..models.investigator import Investigation
 from ..pipeline import Engine
 from ..schemas import ErrorEvent, LocateResult, ResultEvent
-from ..streetmatch.service import StreetResult
+from ..skyline.service import SkylineService
+from ..streetmatch.service import Job, StreetMatchService, StreetResult
+from .auto import INDOOR, lead_point, scene_of, skyline_around
 from .store import ArchiveStore, Row
 
 log = logging.getLogger(__name__)
@@ -50,6 +52,7 @@ class PhotoSummary(BaseModel):
     era: str | None
     location: Location | None
     lead: str | None = None
+    searching: str | None = None  # automatic street/skyline search in progress
 
 
 class PhotoDetail(PhotoSummary):
@@ -57,6 +60,7 @@ class PhotoDetail(PhotoSummary):
     result: LocateResult | None
     investigation: Investigation | None = None
     streetmatch: StreetResult | None = None
+    skyline: dict[str, Any] | None = None
 
 
 class Group(BaseModel):
@@ -126,6 +130,18 @@ def own_location(row: Row) -> Location | None:
                 resolution="exact",
             )
         )
+    sky = row.skyline or {}
+    if sky.get("pinned") and sky.get("latitude") is not None:
+        options.append(
+            Location(
+                latitude=sky["latitude"],
+                longitude=sky["longitude"],
+                label="Mountain skyline match",
+                source="photo",
+                confidence=round(100 * float(sky.get("confidence", 0)), 1),
+                resolution="street",
+            )
+        )
     return max((o for o in options if o.resolution in PINNED), key=_strength, default=None)
 
 
@@ -167,10 +183,24 @@ def resolve(rows: list[Row]) -> dict[str, Location | None]:
 
 class ArchiveService:
     def __init__(
-        self, store: ArchiveStore, engine: Engine, people_policy: str, concurrency: int, investigate: bool = True
+        self,
+        store: ArchiveStore,
+        engine: Engine,
+        people_policy: str,
+        concurrency: int,
+        investigate: bool = True,
+        streetmatch: StreetMatchService | None = None,
+        skyline: SkylineService | None = None,
+        auto_street_km2: float = 25.0,
+        auto_skyline_km: float = 20.0,
     ) -> None:
         self.store = store
         self.investigate = investigate
+        self.streetmatch = streetmatch
+        self.skyline = skyline
+        self.auto_street_km2 = auto_street_km2
+        self.auto_skyline_km = auto_skyline_km
+        self.searching: dict[str, Job | str] = {}
         self.engine = engine
         self.people_policy = people_policy
         self.concurrency = max(1, concurrency)
@@ -209,6 +239,48 @@ class ArchiveService:
             except Exception as e:
                 log.exception("archive analysis failed for %s", row.id)
                 await asyncio.to_thread(self.store.set_result, row.id, None, str(e)[:300] or "Analysis failed")
+                continue
+            try:
+                await self.auto_locate(row.id)
+            except Exception:  # the analysis stands; the automatic search is a bonus
+                log.exception("automatic search failed for %s", row.id)
+
+    async def auto_locate(self, pid: str) -> None:
+        """No exact spot yet: search around the lead (skyline for mountains, street photos outdoors)."""
+        row = await asyncio.to_thread(self.store.get, pid)
+        if row is None or own_location(row) is not None or pid in self.searching:
+            return
+        lead = lead_point(row, self.auto_street_km2)
+        if lead is None:
+            return
+        lat, lon, km2 = lead
+        scene = scene_of(row)
+        img = await asyncio.to_thread(self.load_image, pid)
+        if scene == "mountain" and self.skyline is not None:
+            self.searching[pid] = "Matching the mountain skyline around the lead…"
+            try:
+                sky = await asyncio.to_thread(skyline_around, self.skyline, img, lat, lon, self.auto_skyline_km)
+                await asyncio.to_thread(self.store.set_skyline, pid, sky)
+            except Exception:
+                log.exception("automatic skyline search failed for %s", pid)
+                sky = {}
+            finally:
+                self.searching.pop(pid, None)
+            if sky.get("pinned"):
+                return
+        if scene in INDOOR or self.streetmatch is None or not self.streetmatch.enabled:
+            return
+
+        async def save(job: Job) -> None:
+            self.searching.pop(pid, None)
+            if job.result:
+                await asyncio.to_thread(self.store.set_streetmatch, pid, job.result.model_dump(mode="json"))
+
+        self.searching[pid] = self.streetmatch.start_around(img, lat, lon, km2, pid, save)
+
+    def searching_message(self, pid: str) -> str | None:
+        s = self.searching.get(pid)
+        return s if isinstance(s, str) or s is None else s.message or "Searching street photos around the lead…"
 
     def load_image(self, pid: str) -> Image.Image:
         with Image.open(self.store.image_path(pid, "full")) as im:
@@ -249,6 +321,7 @@ class ArchiveService:
             result=LocateResult.model_validate(row.result) if row.result else None,
             investigation=Investigation.model_validate(row.investigation) if row.investigation else None,
             streetmatch=StreetResult.model_validate(row.streetmatch) if row.streetmatch else None,
+            skyline=row.skyline,
         )
 
     def groups(self) -> list[Group]:
@@ -261,8 +334,7 @@ class ArchiveService:
             out.append(Group(id=gid, name=name, photo_ids=[r.id for r in members], location=best))
         return out
 
-    @staticmethod
-    def _summary(r: Row, loc: Location | None, names: dict[str, str]) -> PhotoSummary:
+    def _summary(self, r: Row, loc: Location | None, names: dict[str, str]) -> PhotoSummary:
         analysis: dict[str, Any] = (r.result or {}).get("analysis") or {}
         return PhotoSummary(
             id=r.id,
@@ -278,4 +350,5 @@ class ArchiveService:
             era=analysis.get("era") or None,
             location=loc,
             lead=None if loc else lead_of(r),
+            searching=None if loc else self.searching_message(r.id),
         )

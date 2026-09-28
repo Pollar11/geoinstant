@@ -65,6 +65,7 @@ class Row:
     height: int
     investigation: dict[str, Any] | None = None
     streetmatch: dict[str, Any] | None = None
+    skyline: dict[str, Any] | None = None
 
 
 class ArchiveStore:
@@ -78,7 +79,7 @@ class ArchiveStore:
         with self._lock:
             self._db.executescript(SCHEMA)
             cols = {r[1] for r in self._db.execute("PRAGMA table_info(photos)")}
-            for col in ("investigation", "streetmatch"):  # added after the first release
+            for col in ("investigation", "streetmatch", "skyline"):  # added after the first release
                 if col not in cols:
                     self._db.execute(f"ALTER TABLE photos ADD COLUMN {col} TEXT")
             self._db.execute("UPDATE photos SET status='queued' WHERE status='analyzing'")  # resume after restart
@@ -129,6 +130,7 @@ class ArchiveStore:
             height=r["height"] or 0,
             investigation=json.loads(r["investigation"]) if r["investigation"] else None,
             streetmatch=json.loads(r["streetmatch"]) if r["streetmatch"] else None,
+            skyline=json.loads(r["skyline"]) if r["skyline"] else None,
         )
 
     def get(self, pid: str) -> Row | None:
@@ -166,6 +168,11 @@ class ArchiveStore:
     def set_streetmatch(self, pid: str, result: dict[str, Any]) -> None:
         with self._lock:
             self._db.execute("UPDATE photos SET streetmatch=? WHERE id=?", (json.dumps(result), pid))
+            self._db.commit()
+
+    def set_skyline(self, pid: str, result: dict[str, Any]) -> None:
+        with self._lock:
+            self._db.execute("UPDATE photos SET skyline=? WHERE id=?", (json.dumps(result), pid))
             self._db.commit()
 
     def requeue(self, pid: str) -> None:

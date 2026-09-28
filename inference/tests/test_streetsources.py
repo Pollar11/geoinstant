@@ -1,3 +1,4 @@
+import asyncio
 from pathlib import Path
 from types import SimpleNamespace as NS
 
@@ -61,6 +62,10 @@ def fake_overpass(req: httpx.Request) -> httpx.Response:
             ]
         },
     )
+
+
+def mly(fake: FakeMapillary) -> MapillaryClient:
+    return MapillaryClient("t", http=httpx.AsyncClient(transport=httpx.MockTransport(fake)))
 
 
 def pnx() -> PanoramaxClient:
@@ -142,3 +147,66 @@ def test_verified_match_labels_the_house() -> None:
     assert loc and loc.resolution == "exact" and loc.label == "Facing 14 Rue Soufflot"
     r.streetmatch = {"verified": False, "best": best}
     assert own_location(r) is None
+
+
+def test_rings_cover_the_area() -> None:
+    from geoinstant.streetmatch.service import area_km2, outer_box, rings_around
+
+    rings = rings_around(48.85, 2.34, 25)
+    assert [len(r) for r in rings] == [1, 8, 16]
+    assert 24 < area_km2(outer_box([c for r in rings for c in r])) < 26
+
+
+async def test_search_widens_until_verified(tmp_path: Path) -> None:
+    fake = FakeMapillary()
+    svc = StreetMatchService(tmp_path / "sm", HashEmbedder(), mly(fake))
+    lat, lon = POS["img25"]
+    # Lead ~1.3 km south-west of the real spot: not in the centre square, found in a later ring.
+    r = await svc.search_around(old_print(SCENES["img25"]), lat - 0.009, lon - 0.012, 25)
+    assert r.verified and r.best and r.best.image_id == "img25"
+
+
+async def test_album_pins_photos_automatically(tmp_path: Path) -> None:
+    from geoinstant.archive.service import ArchiveService, own_location
+    from geoinstant.archive.store import ArchiveStore
+
+    store = ArchiveStore(tmp_path / "archive")
+    fake = FakeMapillary()
+    sm = StreetMatchService(tmp_path / "sm", HashEmbedder(), mly(fake))
+    svc = ArchiveService(store, None, "off", 1, streetmatch=sm)  # type: ignore[arg-type]
+    lat, lon = POS["img20"]
+
+    def add(scene: str) -> str:
+        pid = store.add("p.jpg", jpeg_bytes(old_print(SCENES["img20"])), None, "x", 50_000_000)
+        store.set_result(
+            pid, {"latitude": 0, "longitude": 0, "resolution": "world", "confidence": 1, "analysis": {"scene": scene}}
+        )
+        report = {"latitude": lat + 0.004, "longitude": lon, "precision": "city", "place_name": "Paris", "confidence": 0.6}
+        store.set_investigation(pid, {"report": report, "steps": [], "model": "m", "seconds": 1})
+        return pid
+
+    outdoor, indoor = add("urban"), add("home")
+    await svc.auto_locate(indoor)
+    assert indoor not in svc.searching  # rooms can't be matched against street photos
+    await svc.auto_locate(outdoor)
+    assert svc.searching_message(outdoor)
+    await asyncio.gather(*sm._tasks)
+    row = store.get(outdoor)
+    assert row and row.streetmatch and row.streetmatch["verified"]
+    loc = own_location(row)
+    assert loc and loc.resolution == "exact" and abs(loc.latitude - lat) < 1e-6
+    assert svc.searching_message(outdoor) is None
+
+
+def test_lead_needs_city_or_better() -> None:
+    from geoinstant.archive.auto import lead_point
+
+    from .test_archive import row
+
+    r = row("p")
+    r.investigation = {"report": {"latitude": 1.0, "longitude": 2.0, "precision": "region"}}
+    assert lead_point(r, 25) is None
+    r.investigation = {"report": {"latitude": 1.0, "longitude": 2.0, "precision": "city"}}
+    assert lead_point(r, 25) == (1.0, 2.0, 25)
+    r.investigation = {"report": {"latitude": 1.0, "longitude": 2.0, "precision": "street"}}
+    assert lead_point(r, 25) == (1.0, 2.0, 9.0)

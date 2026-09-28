@@ -74,7 +74,7 @@ export default function Album() {
   }, [refresh]);
 
   // Poll while photos are being analysed.
-  const busy = photos.some((p) => p.status === "queued" || p.status === "analyzing");
+  const busy = photos.some((p) => p.status === "queued" || p.status === "analyzing" || p.searching);
   useEffect(() => {
     if (!busy && !upload) return;
     const id = setInterval(() => void refresh(), 3000);

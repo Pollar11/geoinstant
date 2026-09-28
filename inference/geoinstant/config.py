@@ -100,6 +100,9 @@ class Settings(BaseSettings):
     archive_people_policy: Literal["coarsen", "off"] = "off"  # your own family photos: full precision
     archive_concurrency: int = 3
     archive_investigate: bool = True  # run the investigator on every album photo (uses web search)
+    archive_auto_search: bool = True  # then street/skyline match around its lead automatically
+    auto_street_km2: float = 25.0  # city-level lead: search up to 5 x 5 km around it
+    auto_skyline_km: float = 20.0  # mountain photos: search 40 x 40 km around the lead
     archive_max_files_per_upload: int = 100
 
     # --- Feedback / continuous learning ----------------------------------------------------

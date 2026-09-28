@@ -61,11 +61,22 @@ Select photos from the same trip and click **Link as same place/event**; once on
 ARCHIVE_PASSWORD=… ANTHROPIC_API_KEY=… docker compose up --build   # http://localhost:3300/album
 ```
 
+## Automatic exact search (album)
+
+Every album photo goes through this automatically. You don't need to zoom the map.
+
+1. **Investigation:** clues, web search and map lookup give a lead (a street, neighbourhood or town).
+2. **Mountains visible:** skyline match within 20 km of the lead. It pins the photo only at ≥ 50% confidence.
+3. **Outdoors:** street match in 1 km rings outward from the lead: 3 × 3 km for a street lead, up to 5 × 5 km for a town. It stops at the first verified match.
+4. **Result:** the photo is pinned only on a verified match. Otherwise the album shows the lead and why the photo couldn't be pinned.
+
+Indoor photos and leads vaguer than a town (region, country) aren't searched automatically. Add what the family remembers in the notes and click **Analyse again**.
+
 ## Street match (exact spot)
 
-For outdoor photos of streets, houses, shops or squares, the GeoSpy approach. No sign or landmark is needed.
+For outdoor photos of streets, houses, shops or squares, the GeoSpy approach. No sign or landmark is needed. It runs automatically (above), or by hand:
 
-1. Open the photo in the album and zoom the map to the suspected area (≤ 6 km², e.g. the village or neighbourhood from the investigation's lead).
+1. Open the photo in the album and zoom the map to the suspected area (≤ 6 km²).
 2. Click **Search this map area**.
 
 Your photo is compared with every street photo there, then the best 60 are checked point by point (windows, corners, rooflines). A verified match (≥ 30 matching points, well ahead of anywhere else) pins the photo to the exact spot, shows then and now side by side, and names the house the camera faces (OpenStreetMap address).

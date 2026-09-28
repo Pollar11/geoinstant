@@ -48,8 +48,9 @@ export function PhotoGrid({
                   </p>
                 ) : (
                   !busy && (
-                    <p className="truncate text-muted-foreground" title={p.lead ?? undefined}>
-                      Not pinned yet{p.lead ? ` · lead: ${p.lead}` : ""}
+                    <p className="truncate text-muted-foreground" title={p.searching ?? p.lead ?? undefined}>
+                      {p.searching ? "🔎 Searching for the exact spot…" : "Not pinned yet"}
+                      {p.lead ? ` · lead: ${p.lead}` : ""}
                     </p>
                   )
                 )}

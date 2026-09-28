@@ -57,6 +57,18 @@ A verified match becomes the photo's exact location: camera position, heading an
 - Save it as `artifacts/matcher.onnx`.
 - Expected I/O: `images (2,C,H,W)` → `keypoints (2,N,2)`, `matches (M,3)`, `scores (M)`.
 
+## Automatic search (album)
+
+After analysis and investigation, the worker calls `archive/auto.py` for any photo that isn't pinned:
+
+- **Lead:** the investigation's point at city level or finer (else the quick answer at city level with ≥ 50% confidence).
+- **Mountain scenes:** `SkylineService.search` over a 40 × 40 km box around the lead. Kept as a pin at confidence ≥ 0.5.
+- **Outdoor scenes:** `StreetMatchService.search_around`:
+  - 1 km cells in rings (3 × 3 km for a street-level lead, 5 × 5 km for a city)
+  - each ring is embedded, then its top 60 unverified views are checked
+  - stops at the first verified match
+- **Jobs:** one runs at a time. Progress shows in the album as "searching".
+
 ## Models
 
 | Stage | Default | Licence |

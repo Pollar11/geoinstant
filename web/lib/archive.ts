@@ -30,6 +30,7 @@ export const PhotoSummary = z.object({
   era: z.string().nullable(),
   location: Location.nullable(),
   lead: z.string().nullable().optional(),
+  searching: z.string().nullable().optional(),
 });
 export type PhotoSummary = z.infer<typeof PhotoSummary>;
 
@@ -76,6 +77,11 @@ export const PhotoDetail = PhotoSummary.extend({
   result: LocateResult.nullable(),
   investigation: Investigation.nullable().optional(),
   streetmatch: StreetResult.nullable().optional(),
+  skyline: z
+    .object({ pinned: z.boolean(), message: z.string(), confidence: z.number(), status: z.string() })
+    .passthrough()
+    .nullable()
+    .optional(),
 });
 export type PhotoDetail = z.infer<typeof PhotoDetail>;
 

@@ -70,6 +70,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             settings.archive_people_policy,
             settings.archive_concurrency,
             settings.archive_investigate,
+            app.state.streetmatch if settings.archive_auto_search else None,
+            app.state.skyline if settings.archive_auto_search else None,
+            settings.auto_street_km2,
+            settings.auto_skyline_km,
         )
         app.state.archive.start()
     log.info("GeoInstant ready (mode=%s) %s", app.state.engine.mode, app.state.engine.models)
