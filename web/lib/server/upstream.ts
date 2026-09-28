@@ -1,7 +1,10 @@
 /** Server-only helpers for the /api proxy routes (API key, client IP, limits). */
 import "server-only";
 
-export const INFERENCE_URL = (process.env.INFERENCE_URL ?? "http://localhost:8000").replace(/\/$/, "");
+// INFERENCE_HOSTPORT: private "host:port" some hosts (Render) hand out instead of a URL.
+export const INFERENCE_URL = (
+  process.env.INFERENCE_URL ?? (process.env.INFERENCE_HOSTPORT ? `http://${process.env.INFERENCE_HOSTPORT}` : "http://localhost:8000")
+).replace(/\/$/, "");
 const API_KEY = process.env.INFERENCE_API_KEY ?? "";
 
 export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;

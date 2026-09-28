@@ -23,7 +23,9 @@ RUN pip install . "${ORT}" "rapidocr_onnxruntime>=1.3" && \
     if [ "${ORT}" != "onnxruntime" ]; then pip uninstall -y onnxruntime || true; fi
 
 RUN useradd --create-home --uid 10001 app && mkdir -p /artifacts /feedback /archive /cache && chown app /artifacts /feedback /archive /cache
-USER app
+COPY docker-entrypoint.sh /usr/local/bin/
+# Starts as root only to fix mounted-disk ownership, then runs as `app`.
+ENTRYPOINT ["docker-entrypoint.sh"]
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=3s --start-period=20s CMD python -c "import urllib.request,sys; sys.exit(urllib.request.urlopen('http://127.0.0.1:8000/healthz').status != 200)"
 # One worker per GPU: models are loaded per process. Scale out with replicas, not workers.

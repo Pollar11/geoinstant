@@ -21,6 +21,21 @@ GEOINSTANT_VLM_MODE=off uvicorn geoinstant.main:app --port 8000
 cd web && npm ci && INFERENCE_URL=http://localhost:8000 npm run dev
 ```
 
+## Deploy (no computer needed)
+
+On [Render](https://render.com), from a phone or browser:
+
+1. Click **New → Blueprint** and pick this repo. `render.yaml` sets up everything.
+2. Fill in `ANTHROPIC_API_KEY`, `GEOINSTANT_MAPILLARY_TOKEN` (optional) and `ARCHIVE_PASSWORD`.
+3. Click **Apply**. Open the `geoinstant` URL, then `/album`.
+
+What it creates:
+- `geoinstant-engine`: a private location engine with a 10 GB disk for the album and caches
+- `geoinstant`: the public website
+- Cost: about $32 a month (Standard + Starter plans).
+
+Vercel can host only the website, not the engine: the engine needs a disk and long background searches.
+
 ## Models
 
 Without artifacts the service runs in **dev mode**: EXIF GPS, text cues and exact-duplicate retrieval only. Build real artifacts into `inference/artifacts/`:

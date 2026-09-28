@@ -173,3 +173,10 @@ def test_nearby_without_token_gives_links(settings: Settings) -> None:
     with client(settings) as c:
         r = c.get("/v1/nearby", params={"lat": 36.46, "lon": 25.37, "heading": 90}).json()
         assert r["images"] == [] and "heading=90" in r["street_view_url"] and "mapillary" in r["mapillary_url"]
+
+
+def test_single_proxy_key_is_accepted() -> None:
+    from geoinstant.config import Settings
+
+    s = Settings(proxy_api_key="k1", proxy_api_keys=["k0"])
+    assert s.proxy_api_keys == ["k0", "k1"]
