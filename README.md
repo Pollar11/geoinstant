@@ -79,8 +79,9 @@ ARCHIVE_PASSWORD=… ANTHROPIC_API_KEY=… docker compose up --build   # http://
 ## Save this place (new photos)
 
 At a place you'll want to remember, open `/album` on your phone and tap **Save this place**:
-1. Take the photo. The phone's GPS is saved with it, usually to within about 10 m.
-2. Add a note, e.g. "Aunt Mary's wedding, Lake Como".
+1. Take the photo. The phone's position is saved with it: about 10 m with GPS, rougher on phones without GPS.
+2. No GPS, or the position is too rough? Type where you are (a hotel, restaurant, street or village) and pick it from the list.
+3. Add a note, e.g. "Aunt Mary's wedding, Lake Como".
 
 The photo is pinned exactly, with its street address, so nobody has to search for it later. Photos whose file still has GPS are pinned the same way when uploaded.
 

@@ -156,3 +156,25 @@ async def test_gps_photos_get_a_street_address(tmp_path: Path) -> None:
     row.gps = {"latitude": 45.4371, "longitude": 12.3326, "altitude_m": None, "source": "exif", "captured_at": None}
     result = await svc.analyze(row)
     assert result.resolution == "exact" and result.place.display_name.startswith("Riva degli Schiavoni")
+
+
+async def test_place_search_by_name() -> None:
+    import httpx
+
+    from geoinstant.geocode import Nominatim
+
+    def fake(req: httpx.Request) -> httpx.Response:
+        assert req.url.path == "/search" and req.url.params["q"] == "Hotel Sole Malcesine"
+        return httpx.Response(
+            200, json=[{"display_name": "Hotel Sole, Malcesine, Italia", "lat": "45.763", "lon": "10.809"}, {"x": 1}]
+        )
+
+    geo = Nominatim("https://nominatim.test", "test", http=httpx.AsyncClient(transport=httpx.MockTransport(fake)))
+    hits = await geo.search("Hotel Sole Malcesine")
+    assert [(h.name, h.latitude) for h in hits] == [("Hotel Sole, Malcesine, Italia", 45.763)]
+
+
+def test_place_search_endpoint_without_geocoder(settings: Settings, tmp_path: Path) -> None:
+    with TestClient(create_app(settings_for(settings, tmp_path))) as c:
+        assert c.get("/v1/archive/places?q=Venice", headers=TOKEN).json() == []
+        assert c.get("/v1/archive/places?q=Venice").status_code == 401

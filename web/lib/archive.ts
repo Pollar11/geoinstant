@@ -122,6 +122,8 @@ export const archive = {
   deleteGroup: (id: string) => call(`groups/${id}`, null, { method: "DELETE" }),
   streetMatch: (id: string, bbox: [number, number, number, number]) => call(`photos/${id}/streetmatch`, StreetJob, jsonInit("POST", { bbox })),
   streetJob: (jobId: string) => call(`streetmatch/${jobId}`, StreetJob),
+  places: (q: string) =>
+    call(`places?q=${encodeURIComponent(q)}`, z.array(z.object({ name: z.string(), latitude: z.number(), longitude: z.number() }))),
 
   /** Shrink on the device (≤ 2048 px) and send GPS read from the original (or the phone's live position) alongside. */
   async upload(file: File, here?: { latitude: number; longitude: number }): Promise<{ added: string[]; skipped: string[] }> {
