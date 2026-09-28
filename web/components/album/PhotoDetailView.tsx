@@ -70,7 +70,13 @@ export function PhotoDetailView(p: Props) {
               <p className="font-mono text-xs text-muted-foreground">{formatCoord(loc.latitude, loc.longitude, 4)}</p>
             </div>
           ) : (
-            photo.status === "done" && <p className="text-muted-foreground">Not located yet. Try linking it to a photo from the same day, or set it yourself.</p>
+            photo.status === "done" && (
+              <div className="space-y-1">
+                <p className="font-semibold">Exact location not found yet</p>
+                {photo.lead && <p className="text-muted-foreground">Lead: {photo.lead}</p>}
+                <p className="text-muted-foreground">Link it to a photo from the same day, add what you remember in the notes, or set it yourself.</p>
+              </div>
+            )
           )}
           <div className="flex flex-wrap gap-2">
             <Button size="sm" variant={p.picking ? "default" : "outline"} onClick={p.onPickToggle}>

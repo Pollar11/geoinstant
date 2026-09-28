@@ -29,6 +29,7 @@ export const PhotoSummary = z.object({
   scene: z.string().nullable(),
   era: z.string().nullable(),
   location: Location.nullable(),
+  lead: z.string().nullable().optional(),
 });
 export type PhotoSummary = z.infer<typeof PhotoSummary>;
 

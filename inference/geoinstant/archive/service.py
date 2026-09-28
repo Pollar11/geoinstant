@@ -20,7 +20,9 @@ log = logging.getLogger(__name__)
 
 RES_RANK = {"exact": 6, "street": 5, "city": 4, "region": 3, "country": 2, "continent": 1, "world": 0}
 # A photo's own answer is good enough to share with its group at region level or better.
-SHAREABLE = {"exact", "street", "city", "region"}
+# Only a street/building-level answer counts as a location; anything coarser is shown as a lead.
+PINNED = {"exact", "street"}
+SHAREABLE = PINNED
 
 
 class Location(BaseModel):
@@ -46,6 +48,7 @@ class PhotoSummary(BaseModel):
     scene: str | None
     era: str | None
     location: Location | None
+    lead: str | None = None
 
 
 class PhotoDetail(PhotoSummary):
@@ -106,7 +109,18 @@ def own_location(row: Row) -> Location | None:
                 resolution=INVESTIGATION_RES[rep["precision"]],
             )
         )
-    return max(options, key=_strength, default=None)
+    return max((o for o in options if o.resolution in PINNED), key=_strength, default=None)
+
+
+def lead_of(row: Row) -> str | None:
+    """Best coarse answer (e.g. 'Cyclades, Greece · region'), shown when there is no exact spot."""
+    rep = (row.investigation or {}).get("report") or {}
+    if rep.get("place_name") and rep.get("precision") not in (None, "unknown", "exact", "street"):
+        return f"{rep['place_name']} · {rep['precision']}"
+    r = row.result
+    if r and r.get("resolution") not in (None, "world", "exact", "street"):
+        return f"{r['place']['display_name']} · {r['resolution']}"
+    return None
 
 
 def _strength(loc: Location) -> tuple[int, float]:
@@ -245,4 +259,5 @@ class ArchiveService:
             scene=analysis.get("scene"),
             era=analysis.get("era") or None,
             location=loc,
+            lead=None if loc else lead_of(r),
         )

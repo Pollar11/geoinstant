@@ -38,7 +38,7 @@ def res(lat: float, lon: float, resolution: str, conf: float) -> dict:
 
 def test_group_inheritance_rules() -> None:
     rows = [
-        row("a", "g", res(46.0, 7.0, "region", 60)),
+        row("a", "g", res(46.0, 7.0, "street", 60)),
         row("b", "g", res(10.0, 10.0, "continent", 20)),
         row("c", "g"),
         row("d", None, res(1.0, 1.0, "country", 40)),
@@ -47,7 +47,7 @@ def test_group_inheritance_rules() -> None:
     assert locs["a"].source == "photo"
     assert locs["b"].source == "group" and locs["b"].via == "a" and locs["b"].latitude == 46.0
     assert locs["c"].source == "group"
-    assert locs["d"].source == "photo"
+    assert locs["d"] is None  # country-level is a lead, not a location
     # your pin beats everything, for the whole group
     rows[2] = row("c", "g", user=(40.0, -3.0))
     locs = resolve(rows)
@@ -123,3 +123,12 @@ def test_album_flow(settings: Settings, tmp_path: Path) -> None:
 def test_archive_disabled_without_token(settings: Settings) -> None:
     with TestClient(create_app(settings)) as c:
         assert c.get("/v1/archive/photos", headers=TOKEN).status_code == 404
+
+
+def test_coarse_answers_are_leads_not_locations() -> None:
+    from geoinstant.archive.service import lead_of, own_location
+
+    r = row("x", None, res(37.0, 25.0, "region", 70))
+    assert own_location(r) is None
+    assert lead_of(r) == "X · region"
+    assert resolve([r, row("y", "g"), row("z", "g", res(1.0, 1.0, "city", 90))])["y"] is None  # no sharing of coarse guesses

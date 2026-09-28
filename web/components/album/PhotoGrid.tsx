@@ -47,7 +47,11 @@ export function PhotoGrid({
                     <span className="truncate font-medium">{p.location.label}</span>
                   </p>
                 ) : (
-                  !busy && <p className="text-muted-foreground">Not located yet</p>
+                  !busy && (
+                    <p className="truncate text-muted-foreground" title={p.lead ?? undefined}>
+                      Not pinned yet{p.lead ? ` · lead: ${p.lead}` : ""}
+                    </p>
+                  )
                 )}
                 <div className="flex flex-wrap gap-1 text-muted-foreground">
                   {p.era && <span className="rounded bg-muted px-1">{p.era}</span>}

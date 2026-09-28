@@ -6,12 +6,17 @@ import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import type { Investigation, InvestigationStep, Nearby } from "@/lib/api-types";
+import type { Investigation, InvestigationReport, InvestigationStep, Nearby } from "@/lib/api-types";
 import { nearby } from "@/lib/client";
 import { formatCoord } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 const STEP_ICON = { note: MessageSquare, zoom: ZoomIn, search: Search, geocode: MapPin, reverse: Globe, error: AlertTriangle } as const;
+/** Only a verified street/building-level answer counts as a location; anything coarser is a lead. */
+export function isPinned(r: InvestigationReport): boolean {
+  return (r.precision === "exact" || r.precision === "street") && r.latitude != null && r.longitude != null && r.confidence >= 0.5;
+}
+
 const PRECISION: Record<string, string> = {
   exact: "Exact spot",
   street: "Street level",
@@ -46,9 +51,9 @@ export function InvestigationPanel({ steps, investigation, running, error, onSta
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4 text-sm">
-        {report && report.precision !== "unknown" && (
+        {report && isPinned(report) && (
           <div className="space-y-2 rounded-lg border border-primary/30 bg-primary/5 p-3">
-            <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">This photo was taken at</p>
+            <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">📍 Exact location</p>
             <p className="text-xl font-semibold">{report.place_name}</p>
             {report.address && <p className="text-muted-foreground">{report.address}</p>}
             <div className="flex flex-wrap items-center gap-2">
@@ -72,10 +77,25 @@ export function InvestigationPanel({ steps, investigation, running, error, onSta
             )}
           </div>
         )}
-        {report && report.precision === "unknown" && (
-          <p className="rounded-md bg-muted p-3">No location could be established from this photo. {report.summary}</p>
+        {investigation && !running && !(report && isPinned(report)) && (
+          <div className="space-y-2 rounded-lg border p-3">
+            <p className="font-semibold">Exact location not found in this photo</p>
+            <p className="text-muted-foreground">
+              Nothing visible pins it to a street or building (no readable name, sign, address or known landmark).
+            </p>
+            {report && report.place_name && (
+              <p>
+                <span className="text-muted-foreground">Lead: </span>
+                {report.place_name}
+                {report.summary && <span className="text-muted-foreground"> · {report.summary}</span>}
+              </p>
+            )}
+            <p className="text-muted-foreground">
+              To pin it: link it with an outdoor photo from the same day, add what the family remembers below, or use the
+              mountain skyline match if mountains are visible.
+            </p>
+          </div>
         )}
-        {investigation && !report && !running && <p className="text-muted-foreground">The investigation ended without an answer.</p>}
         {error && <p className="text-danger">{error}</p>}
 
         {shown.length > 0 && (
@@ -95,7 +115,9 @@ export function InvestigationPanel({ steps, investigation, running, error, onSta
           </details>
         )}
 
-        {report?.latitude != null && report.longitude != null && <ThenAndNow lat={report.latitude} lon={report.longitude} />}
+        {report && isPinned(report) && report.latitude != null && report.longitude != null && (
+          <ThenAndNow lat={report.latitude} lon={report.longitude} />
+        )}
 
         {onStart && !running && (
           <div className="space-y-2 border-t pt-3">

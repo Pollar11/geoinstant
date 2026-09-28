@@ -11,7 +11,7 @@ import { PhotoWithRegions } from "@/components/PhotoWithRegions";
 import { PipelineTimeline } from "@/components/PipelineTimeline";
 import { ResultPanel, ResultSkeleton } from "@/components/ResultPanel";
 import { ClueBoard } from "@/components/ClueBoard";
-import { InvestigationPanel } from "@/components/InvestigationPanel";
+import { InvestigationPanel, isPinned } from "@/components/InvestigationPanel";
 import { SkylinePanel } from "@/components/SkylinePanel";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -101,9 +101,7 @@ export default function Home() {
   );
   const found = useMemo(() => {
     const r = inv?.report;
-    return r && r.latitude != null && r.longitude != null && ["exact", "street", "neighborhood", "city"].includes(r.precision)
-      ? { latitude: r.latitude, longitude: r.longitude }
-      : null;
+    return r && isPinned(r) ? { latitude: r.latitude!, longitude: r.longitude! } : null;
   }, [inv]);
   const skylineLine = useMemo(() => sky?.profile.filter((p) => p[2] > 0).map((p) => [p[0], p[1]] as [number, number]), [sky]);
   const startOver = useCallback(() => {
@@ -238,7 +236,7 @@ export default function Home() {
           <div className="flex min-w-0 flex-col gap-4">
             <Card className="h-[45dvh] min-h-80 overflow-hidden lg:h-[28rem]">
               <LocationMap
-                result={result}
+                result={result?.source === "visual" ? null : result}
                 correcting={correcting}
                 correction={correction}
                 onCorrect={setCorrection}
@@ -282,8 +280,17 @@ export default function Home() {
                 onStart={(c) => void runInvestigation(c)}
               />
             )}
-            {result ? <ResultPanel result={result} refining={refining} onVerdict={verdict} /> : !error && <ResultSkeleton />}
-            {result?.analysis && <ClueBoard analysis={result.analysis} />}
+            {result?.source !== "visual" && result && <ResultPanel result={result} refining={refining} onVerdict={verdict} />}
+            {!result && !error && <ResultSkeleton />}
+            {result?.source === "visual" && (
+              <details className="rounded-lg border bg-card p-4 text-sm">
+                <summary className="cursor-pointer font-medium">Analysis details (clues and rough estimate, not a location)</summary>
+                <div className="mt-4 space-y-4">
+                  {result.analysis && <ClueBoard analysis={result.analysis} />}
+                  <ResultPanel result={result} refining={refining} onVerdict={verdict} />
+                </div>
+              </details>
+            )}
           </div>
         </div>
       )}
