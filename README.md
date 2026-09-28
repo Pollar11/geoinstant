@@ -61,6 +61,17 @@ Select photos from the same trip and click **Link as same place/event**; once on
 ARCHIVE_PASSWORD=… ANTHROPIC_API_KEY=… docker compose up --build   # http://localhost:3300/album
 ```
 
+## Street match (exact spot)
+
+For outdoor photos of streets, houses, shops or squares, the GeoSpy approach. No sign or landmark is needed.
+
+1. Open the photo in the album and zoom the map to the suspected area (≤ 6 km², e.g. the village or neighbourhood from the investigation's lead).
+2. Click **Search this map area**.
+
+Your photo is compared with every Mapillary street photo there, then the best 60 are checked point by point (windows, corners, rooflines). A verified match (≥ 30 matching points, well ahead of anywhere else) pins the photo to the exact spot and shows then and now side by side.
+
+Needs `GEOINSTANT_MAPILLARY_TOKEN` and street photos of the area on Mapillary. The place must still look similar.
+
 ## Mountain skyline matching
 
 For photos with mountains in the background:

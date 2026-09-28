@@ -128,7 +128,7 @@ export function AlbumMap({ photos, selectedId, radiusKm, picking, onPick, onSele
         features: views.map((v, i) => ({ ...cone(v), properties: { sel: i === selectedView } })),
       });
       const v = views[selectedView];
-      if (v) m.flyTo({ center: [v.longitude, v.latitude], zoom: 11 });
+      if (v) m.flyTo({ center: [v.longitude, v.latitude], zoom: v.km && v.km < 1 ? 17 : 11 });
     });
   }, [views, selectedView]);
 

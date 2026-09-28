@@ -33,10 +33,43 @@ export const PhotoSummary = z.object({
 });
 export type PhotoSummary = z.infer<typeof PhotoSummary>;
 
+export const StreetMatch = z.object({
+  image_id: z.string(),
+  latitude: z.number(),
+  longitude: z.number(),
+  heading: z.number(),
+  captured_at: z.string(),
+  image_url: z.string(),
+  similarity: z.number(),
+  inliers: z.number(),
+});
+export type StreetMatch = z.infer<typeof StreetMatch>;
+
+export const StreetResult = z.object({
+  verified: z.boolean(),
+  best: StreetMatch.nullable(),
+  candidates: z.array(StreetMatch),
+  searched: z.number(),
+  bbox: z.tuple([z.number(), z.number(), z.number(), z.number()]),
+  message: z.string(),
+});
+export type StreetResult = z.infer<typeof StreetResult>;
+
+export const StreetJob = z.object({
+  id: z.string(),
+  status: z.enum(["queued", "listing", "downloading", "matching", "verifying", "done", "error"]),
+  progress: z.number(),
+  message: z.string(),
+  result: StreetResult.nullable(),
+  photo_id: z.string().nullable(),
+});
+export type StreetJob = z.infer<typeof StreetJob>;
+
 export const PhotoDetail = PhotoSummary.extend({
   note: z.string().nullable(),
   result: LocateResult.nullable(),
   investigation: Investigation.nullable().optional(),
+  streetmatch: StreetResult.nullable().optional(),
 });
 export type PhotoDetail = z.infer<typeof PhotoDetail>;
 
@@ -75,6 +108,8 @@ export const archive = {
   groups: () => call("groups", z.array(Group)),
   createGroup: (name: string, photoIds: string[]) => call("groups", Group, jsonInit("POST", { name, photo_ids: photoIds })),
   deleteGroup: (id: string) => call(`groups/${id}`, null, { method: "DELETE" }),
+  streetMatch: (id: string, bbox: [number, number, number, number]) => call(`photos/${id}/streetmatch`, StreetJob, jsonInit("POST", { bbox })),
+  streetJob: (jobId: string) => call(`streetmatch/${jobId}`, StreetJob),
 
   /** Shrink on the device (≤ 2048 px) and send GPS read from the original alongside. */
   async upload(file: File): Promise<{ added: string[]; skipped: string[] }> {

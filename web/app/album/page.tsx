@@ -7,11 +7,23 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlbumMap } from "@/components/album/AlbumMap";
 import { Legend, PhotoGrid } from "@/components/album/PhotoGrid";
 import { PhotoDetailView } from "@/components/album/PhotoDetailView";
+import { StreetMatchPanel } from "@/components/album/StreetMatchPanel";
 import { SkylinePanel } from "@/components/SkylinePanel";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { BBox, SkylineResult } from "@/lib/api-types";
-import { archive, imageUrl, login, logout, type Group, type PhotoDetail, type PhotoSummary } from "@/lib/archive";
+import {
+  archive,
+  imageUrl,
+  login,
+  logout,
+  type Group,
+  type PhotoDetail,
+  type PhotoSummary,
+  type StreetJob,
+  type StreetMatch,
+  type StreetResult,
+} from "@/lib/archive";
 import { ApiError, reverse, skylineSearch } from "@/lib/client";
 import { formatCoord } from "@/lib/format";
 import { ACCEPT } from "@/lib/prepare-image";
@@ -38,6 +50,11 @@ export default function Album() {
   const [skyBusy, setSkyBusy] = useState(false);
   const [skyError, setSkyError] = useState<string | null>(null);
   const [skySel, setSkySel] = useState(0);
+  // street match (per open photo)
+  const [smJob, setSmJob] = useState<StreetJob | null>(null);
+  const [smResult, setSmResult] = useState<StreetResult | null>(null);
+  const [smError, setSmError] = useState<string | null>(null);
+  const [smSel, setSmSel] = useState(0);
 
   const refresh = useCallback(async () => {
     try {
@@ -77,7 +94,49 @@ export default function Album() {
     setTrace([]);
     setSky(null);
     setSkyError(null);
+    setSmJob(null);
+    setSmResult(null);
+    setSmError(null);
+    setSmSel(0);
   };
+
+  // Poll a running street match; when it finishes, reload the photo (a verified match pins it).
+  const smRunning = smJob != null && smJob.status !== "done" && smJob.status !== "error";
+  const smJobId = smJob?.id;
+  useEffect(() => {
+    if (!smRunning || !smJobId) return;
+    const t = setInterval(async () => {
+      try {
+        const j = await archive.streetJob(smJobId);
+        setSmJob(j);
+        if (j.status === "error") setSmError(j.message);
+        if (j.status === "done") {
+          setSmResult(j.result);
+          setSmSel(0);
+          void refresh();
+        }
+      } catch (e) {
+        setSmError(e instanceof Error ? e.message : "Street match failed");
+        setSmJob(null);
+      }
+    }, 1000);
+    return () => clearInterval(t);
+  }, [smRunning, smJobId, refresh]);
+
+  async function searchStreet() {
+    if (!openId || !bounds) return;
+    setSmError(null);
+    try {
+      setSmJob(await archive.streetMatch(openId, bounds));
+    } catch (e) {
+      setSmError(e instanceof Error ? e.message : "Street match failed");
+    }
+  }
+
+  async function pinStreetSpot(m: StreetMatch) {
+    const place = await reverse(m.latitude, m.longitude).catch(() => null);
+    await patch({ user_lat: m.latitude, user_lon: m.longitude, user_label: place?.display_name ?? formatCoord(m.latitude, m.longitude, 5) });
+  }
 
   async function addFiles(list: FileList | null) {
     const files = Array.from(list ?? []).filter((f) => f.type.startsWith("image/") || /\.(heic|heif)$/i.test(f.name));
@@ -147,9 +206,14 @@ export default function Album() {
     () => photos.filter((p) => filter === "all" || (filter === "located" ? p.location : !p.location)),
     [photos, filter],
   );
+  const street = smResult ?? detail?.streetmatch ?? null;
+  // Street candidates (camera position + direction) take over the map from skyline cones.
   const views = useMemo(
-    () => (sky?.candidates ?? []).map((c) => ({ latitude: c.latitude, longitude: c.longitude, azimuth: c.azimuth_deg, fov: c.fov_deg })),
-    [sky],
+    () =>
+      street
+        ? street.candidates.map((c) => ({ latitude: c.latitude, longitude: c.longitude, azimuth: c.heading, fov: 60, km: 0.06 }))
+        : (sky?.candidates ?? []).map((c) => ({ latitude: c.latitude, longitude: c.longitude, azimuth: c.azimuth_deg, fov: c.fov_deg })),
+    [sky, street],
   );
   const skylineLine = useMemo(() => sky?.profile.filter((q) => q[2] > 0).map((q) => [q[0], q[1]] as [number, number]), [sky]);
   const located = photos.filter((p) => p.location).length;
@@ -228,6 +292,19 @@ export default function Album() {
                   onSelect={setSkySel}
                 />
               }
+              streetPanel={
+                <StreetMatchPanel
+                  photoUrl={imageUrl(detail.id)}
+                  bounds={bounds}
+                  job={smJob}
+                  result={street}
+                  error={smError}
+                  selected={smSel}
+                  onSearch={() => void searchStreet()}
+                  onSelect={setSmSel}
+                  onUse={(m) => void pinStreetSpot(m)}
+                />
+              }
             />
           ) : (
             <div className="flex flex-col gap-4">
@@ -290,7 +367,7 @@ export default function Album() {
             onSelect={open}
             onBounds={setBounds}
             views={views}
-            selectedView={skySel}
+            selectedView={street ? smSel : skySel}
           />
         </Card>
       </div>

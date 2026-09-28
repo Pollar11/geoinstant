@@ -20,6 +20,7 @@ from .archive.service import ArchiveService
 from .archive.store import ArchiveStore
 from .config import Settings, get_settings
 from .imageio import ImageError, decode
+from .models.embedder import load_embedder
 from .models.investigator import Investigation
 from .nearby import Nearby, nearby
 from .pipeline import Engine
@@ -38,6 +39,8 @@ from .schemas import (
 )
 from .skyline.extract import detect, from_trace
 from .skyline.service import SkylineService
+from .streetmatch.mapillary import MapillaryClient
+from .streetmatch.service import StreetMatchService
 
 log = logging.getLogger("geoinstant")
 
@@ -54,6 +57,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         settings.dem_tile_url,
         settings.skyline_max_area_km2,
         settings.skyline_max_km,
+    )
+    vpr = settings.artifact(settings.vpr_encoder)
+    app.state.streetmatch = StreetMatchService(
+        settings.artifact(settings.streetmatch_dir),
+        load_embedder(vpr, settings.image_encoder_size, settings.onnx_providers, settings.onnx_threads)
+        if vpr.exists()
+        else app.state.engine.embedder,
+        MapillaryClient(settings.mapillary_token) if settings.mapillary_token else None,
+        settings.streetmatch_max_area_km2,
     )
     app.state.archive = None
     if settings.archive_token:

@@ -14,6 +14,7 @@ from starlette.datastructures import UploadFile
 
 from ..config import Settings
 from ..imageio import GpsFix, ImageError, content_hash, extract_gps
+from ..streetmatch.service import Job, StreetMatchService
 from .service import ArchiveService, Group, PhotoDetail, PhotoSummary
 
 
@@ -47,6 +48,10 @@ def _client_fix(items: list[object], i: int) -> GpsFix | None:
         return None
     taken = g.get("taken")
     return GpsFix(round(lat, 7), round(lon, 7), None, "exif", str(taken)[:40] if taken else None)
+
+
+class StreetMatchStart(BaseModel):
+    bbox: tuple[float, float, float, float]  # south, west, north, east
 
 
 class UploadResult(BaseModel):
@@ -135,6 +140,36 @@ def router(settings: Settings) -> APIRouter:
     async def reanalyze(pid: str, svc: Svc) -> None:
         await asyncio.to_thread(svc.store.requeue, pid)
         svc.notify()
+
+    @r.post("/photos/{pid}/streetmatch", response_model=Job, status_code=202)
+    async def streetmatch(pid: str, body: StreetMatchStart, request: Request, svc: Svc) -> Job:
+        """Compare the photo with every street photo in the box; a verified match pins it exactly."""
+        sm: StreetMatchService | None = getattr(request.app.state, "streetmatch", None)
+        if sm is None or not sm.enabled:
+            raise HTTPException(503, "Street match needs GEOINSTANT_MAPILLARY_TOKEN")
+        if svc.store.get(pid) is None:
+            raise HTTPException(404, "No such photo")
+        s, w, n, e = body.bbox
+        if not (-90 <= s < n <= 90 and -180 <= w < e <= 180):
+            raise HTTPException(422, "Bad bbox")
+        img = await asyncio.to_thread(svc.load_image, pid)
+
+        async def save(job: Job) -> None:
+            if job.result:
+                await asyncio.to_thread(svc.store.set_streetmatch, pid, job.result.model_dump(mode="json"))
+
+        try:
+            return sm.start(img, body.bbox, pid, save)
+        except ValueError as e:
+            raise HTTPException(422, str(e)) from e
+
+    @r.get("/streetmatch/{job_id}", response_model=Job)
+    async def streetmatch_job(job_id: str, request: Request, svc: Svc) -> Job:
+        sm: StreetMatchService | None = getattr(request.app.state, "streetmatch", None)
+        job = sm.jobs.get(job_id) if sm else None
+        if job is None:
+            raise HTTPException(404, "No such search")
+        return job
 
     @r.get("/groups", response_model=list[Group])
     async def groups(svc: Svc) -> list[Group]:

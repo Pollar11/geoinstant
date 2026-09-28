@@ -36,6 +36,18 @@ FFT match over direction × lens → top 5 → refine on a finer grid → positi
   - Every search reporting ≥ 50% confidence was correct (8 of 8).
 - **Limits:** the ridge must be distant (> 0.5 km) and distinctive, and you need a rough search area.
 
+## Street match
+
+Visual place recognition, album only (`streetmatch/`):
+
+1. List Mapillary images in the bbox (400 m tiles; full tiles are split).
+2. Embed 256 px thumbnails, cached by image id in SQLite, with `vpr_encoder.onnx` if present (e.g. MixVPR or SALAD), else the main encoder.
+3. Take the top 60 by cosine similarity.
+4. Verify each with SIFT on 1024 px (CLAHE for faded prints): ratio test, mutual best match, then RANSAC fundamental-matrix inliers.
+5. Mark it verified at ≥ 30 inliers and ≥ 1.5× the best candidate more than 60 m away (neighbouring frames of the same spot don't count against it).
+
+A verified match becomes the photo's exact location, taken from the street photo's camera position and heading.
+
 ## Models
 
 | Stage | Default | Licence |

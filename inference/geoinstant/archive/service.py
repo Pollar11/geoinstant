@@ -14,6 +14,7 @@ from ..imageio import GpsFix
 from ..models.investigator import Investigation
 from ..pipeline import Engine
 from ..schemas import ErrorEvent, LocateResult, ResultEvent
+from ..streetmatch.service import StreetResult
 from .store import ArchiveStore, Row
 
 log = logging.getLogger(__name__)
@@ -55,6 +56,7 @@ class PhotoDetail(PhotoSummary):
     note: str | None
     result: LocateResult | None
     investigation: Investigation | None = None
+    streetmatch: StreetResult | None = None
 
 
 class Group(BaseModel):
@@ -107,6 +109,19 @@ def own_location(row: Row) -> Location | None:
                 source="photo",
                 confidence=round(100 * float(rep.get("confidence", 0)), 1),
                 resolution=INVESTIGATION_RES[rep["precision"]],
+            )
+        )
+    sm = row.streetmatch or {}
+    if sm.get("verified") and sm.get("best"):
+        b = sm["best"]
+        options.append(
+            Location(
+                latitude=b["latitude"],
+                longitude=b["longitude"],
+                label=f"Matched street photo{' from ' + b['captured_at'] if b.get('captured_at') else ''}",
+                source="photo",
+                confidence=95,
+                resolution="exact",
             )
         )
     return max((o for o in options if o.resolution in PINNED), key=_strength, default=None)
@@ -185,7 +200,7 @@ class ArchiveService:
                 inv = self.engine.investigator
                 # Investigate only when the reasoning model is reachable (it produced the clue board).
                 if self.investigate and inv is not None and result.analysis is not None:
-                    img = await asyncio.to_thread(self._load_image, row.id)
+                    img = await asyncio.to_thread(self.load_image, row.id)
                     async for ev in inv.run(img, row.note or ""):
                         if isinstance(ev, Investigation):
                             await asyncio.to_thread(self.store.set_investigation, row.id, ev.model_dump(mode="json"))
@@ -193,7 +208,7 @@ class ArchiveService:
                 log.exception("archive analysis failed for %s", row.id)
                 await asyncio.to_thread(self.store.set_result, row.id, None, str(e)[:300] or "Analysis failed")
 
-    def _load_image(self, pid: str) -> Image.Image:
+    def load_image(self, pid: str) -> Image.Image:
         with Image.open(self.store.image_path(pid, "full")) as im:
             return im.convert("RGB")
 
@@ -231,6 +246,7 @@ class ArchiveService:
             note=row.note,
             result=LocateResult.model_validate(row.result) if row.result else None,
             investigation=Investigation.model_validate(row.investigation) if row.investigation else None,
+            streetmatch=StreetResult.model_validate(row.streetmatch) if row.streetmatch else None,
         )
 
     def groups(self) -> list[Group]:

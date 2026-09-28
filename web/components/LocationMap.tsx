@@ -12,7 +12,7 @@ const EMPTY: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: 
 const NO_VIEWS: View[] = [];
 const NO_HEAT: [number, number, number][] = [];
 
-export type View = { latitude: number; longitude: number; azimuth: number; fov: number };
+export type View = { latitude: number; longitude: number; azimuth: number; fov: number; km?: number };
 
 type Props = {
   result: LocateResult | null;
@@ -27,7 +27,7 @@ type Props = {
 };
 
 /** Camera viewing cone as a polygon (8 km long). */
-export function cone(v: View, km = 8): GeoJSON.Feature<GeoJSON.Polygon> {
+export function cone(v: View, km = v.km ?? 8): GeoJSON.Feature<GeoJSON.Polygon> {
   const ring: [number, number][] = [[v.longitude, v.latitude]];
   for (let i = 0; i <= 12; i++) ring.push(destination(v.latitude, v.longitude, km, v.azimuth - v.fov / 2 + (v.fov * i) / 12));
   ring.push([v.longitude, v.latitude]);

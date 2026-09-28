@@ -70,6 +70,12 @@ Returns a `Place` for a coordinate.
 
 Returns `{ "accepted": true, "feedback_id": "…", "stored_image": false, "stored_embedding": true }`
 
+## POST /v1/archive/photos/{id}/streetmatch
+
+Album only (`X-Archive-Token`). Body `{"bbox": [s, w, n, e]}`, ≤ 6 km². Returns a job: `{id, status, progress, message, result}`.
+
+Poll `GET /v1/archive/streetmatch/{job_id}`. The result has `verified`, `best`, `candidates[]` (`latitude`, `longitude`, `heading`, `captured_at`, `image_url`, `inliers`) and `searched`. A verified result becomes the photo's exact location.
+
 ## GET /healthz
 
 Returns `{ "status": "ok", "mode": "dev|partial|production", "models": {…} }`

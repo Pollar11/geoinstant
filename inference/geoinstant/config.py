@@ -85,6 +85,11 @@ class Settings(BaseSettings):
     skyline_max_area_km2: float = 5000.0  # on-demand search area limit
     skyline_max_km: float = 40.0  # how far to render terrain
 
+    # --- Street match (compare with every street photo of an area; needs mapillary_token) --------
+    streetmatch_dir: str = "streetmatch"  # descriptor cache
+    vpr_encoder: str = "vpr_encoder.onnx"  # optional place-recognition model; falls back to image_encoder
+    streetmatch_max_area_km2: float = 6.0
+
     # --- Private photo archive (album) ------------------------------------------------------
     archive_dir: Path = Path("./archive")
     archive_token: str = ""  # shared secret with the web app; empty = archive disabled

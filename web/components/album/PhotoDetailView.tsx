@@ -29,6 +29,7 @@ type Props = {
   onDelete: () => void;
   onReanalyze: () => void;
   skylinePanel: React.ReactNode;
+  streetPanel: React.ReactNode;
 };
 
 export function PhotoDetailView(p: Props) {
@@ -143,6 +144,7 @@ export function PhotoDetailView(p: Props) {
           }}
         />
       )}
+      {p.streetPanel}
       {loc?.source === "you" && ["exact", "street"].includes(loc.resolution) && (
         <Card>
           <CardContent className="pt-4 text-sm">
@@ -150,14 +152,21 @@ export function PhotoDetailView(p: Props) {
           </CardContent>
         </Card>
       )}
-      {r?.analysis && <ClueBoard analysis={r.analysis} />}
       {p.skylinePanel}
-      {r && r.source === "visual" && (
-        <ResultPanel
-          result={r}
-          refining={false}
-          onVerdict={(ok) => (ok ? void p.onPatch({ user_lat: r.latitude, user_lon: r.longitude, user_label: r.place.display_name }) : p.onPickToggle())}
-        />
+      {r && (r.analysis || r.source === "visual") && (
+        <details className="rounded-lg border bg-card p-3 text-sm">
+          <summary className="cursor-pointer text-muted-foreground">Analysis details (clues and rough estimate)</summary>
+          <div className="mt-3 flex flex-col gap-4">
+            {r.analysis && <ClueBoard analysis={r.analysis} />}
+            {r.source === "visual" && (
+              <ResultPanel
+                result={r}
+                refining={false}
+                onVerdict={(ok) => (ok ? void p.onPatch({ user_lat: r.latitude, user_lon: r.longitude, user_label: r.place.display_name }) : p.onPickToggle())}
+              />
+            )}
+          </div>
+        </details>
       )}
     </div>
   );
