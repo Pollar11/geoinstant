@@ -114,11 +114,13 @@ def own_location(row: Row) -> Location | None:
     sm = row.streetmatch or {}
     if sm.get("verified") and sm.get("best"):
         b = sm["best"]
+        house = sm.get("building") or {}
         options.append(
             Location(
                 latitude=b["latitude"],
                 longitude=b["longitude"],
-                label=f"Matched street photo{' from ' + b['captured_at'] if b.get('captured_at') else ''}",
+                label=(f"Facing {house['address']}" if house.get("in_view") else "")
+                or f"Matched street photo{' from ' + b['captured_at'] if b.get('captured_at') else ''}",
                 source="photo",
                 confidence=95,
                 resolution="exact",

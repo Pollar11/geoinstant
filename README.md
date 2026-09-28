@@ -68,9 +68,13 @@ For outdoor photos of streets, houses, shops or squares, the GeoSpy approach. No
 1. Open the photo in the album and zoom the map to the suspected area (≤ 6 km², e.g. the village or neighbourhood from the investigation's lead).
 2. Click **Search this map area**.
 
-Your photo is compared with every Mapillary street photo there, then the best 60 are checked point by point (windows, corners, rooflines). A verified match (≥ 30 matching points, well ahead of anywhere else) pins the photo to the exact spot and shows then and now side by side.
+Your photo is compared with every street photo there, then the best 60 are checked point by point (windows, corners, rooflines). A verified match (≥ 30 matching points, well ahead of anywhere else) pins the photo to the exact spot, shows then and now side by side, and names the house the camera faces (OpenStreetMap address).
 
-Needs `GEOINSTANT_MAPILLARY_TOKEN` and street photos of the area on Mapillary. The place must still look similar.
+- **Sources:** Panoramax (open, no token) and Mapillary (`GEOINSTANT_MAPILLARY_TOKEN`). Real-estate sites (Zillow, Redfin) are not used: no open API, and scraping breaks their terms.
+- **Models:** works out of the box with SIFT. For much better results on old photos, add the transformer models:
+  - `python scripts/export_vpr.py` → `artifacts/vpr_encoder.onnx` (MegaLoc, finds similar views)
+  - LightGlue → `artifacts/matcher.onnx` (checks point by point, see [DESIGN.md](docs/DESIGN.md#street-match))
+- **Limits:** the area needs street photo coverage, and the place must still look similar.
 
 ## Mountain skyline matching
 

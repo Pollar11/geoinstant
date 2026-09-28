@@ -87,4 +87,6 @@ def settings(artifacts: Path, tmp_path: Path) -> Settings:
         rate_limit_burst=100,
         fast_deadline_ms=5000,
         dem_tile_url="",  # tests never download elevation tiles  # CI machines are slow; the latency budget is tested separately
+        panoramax_url="",  # no network in tests
+        overpass_url="",
     )

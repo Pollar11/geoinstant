@@ -146,7 +146,7 @@ def router(settings: Settings) -> APIRouter:
         """Compare the photo with every street photo in the box; a verified match pins it exactly."""
         sm: StreetMatchService | None = getattr(request.app.state, "streetmatch", None)
         if sm is None or not sm.enabled:
-            raise HTTPException(503, "Street match needs GEOINSTANT_MAPILLARY_TOKEN")
+            raise HTTPException(503, "No street photo source is configured")
         if svc.store.get(pid) is None:
             raise HTTPException(404, "No such photo")
         s, w, n, e = body.bbox

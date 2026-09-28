@@ -40,13 +40,22 @@ FFT match over direction × lens → top 5 → refine on a finer grid → positi
 
 Visual place recognition, album only (`streetmatch/`):
 
-1. List Mapillary images in the bbox (400 m tiles; full tiles are split).
-2. Embed 256 px thumbnails, cached by image id in SQLite, with `vpr_encoder.onnx` if present (e.g. MixVPR or SALAD), else the main encoder.
+1. List street images in the bbox from Mapillary (400 m tiles; full tiles are split) and Panoramax (STAC search, paged). A failing source is skipped.
+2. Embed thumbnails, cached by image id in SQLite. The embedder is `vpr_encoder.onnx` (MegaLoc: DINOv2 ViT + attention aggregation, whole view, no crop) if present, else the main encoder.
 3. Take the top 60 by cosine similarity.
-4. Verify each with SIFT on 1024 px (CLAHE for faded prints): ratio test, mutual best match, then RANSAC fundamental-matrix inliers.
+4. Verify each on ~1024 px (CLAHE for faded prints), then count RANSAC fundamental-matrix inliers:
+   - `matcher.onnx` (LightGlue, a transformer matcher that uses self- and cross-attention) if present
+   - else SIFT + ratio test + mutual best match
 5. Mark it verified at ≥ 30 inliers and ≥ 1.5× the best candidate more than 60 m away (neighbouring frames of the same spot don't count against it).
+6. The house: take OSM addresses within 80 m (Overpass) and pick the nearest one within ±35° of the camera heading, else the nearest overall (shown as "Nearest address").
 
-A verified match becomes the photo's exact location, taken from the street photo's camera position and heading.
+A verified match becomes the photo's exact location: camera position, heading and the address it faces.
+
+**LightGlue model:** export the end-to-end extractor + LightGlue pipeline with [LightGlue-ONNX](https://github.com/fabio-sim/LightGlue-ONNX).
+- Use batch 2 and a fixed size, e.g. 768×1024.
+- Use DISK or ALIKED features. SuperPoint weights are non-commercial.
+- Save it as `artifacts/matcher.onnx`.
+- Expected I/O: `images (2,C,H,W)` → `keypoints (2,N,2)`, `matches (M,3)`, `scores (M)`.
 
 ## Models
 

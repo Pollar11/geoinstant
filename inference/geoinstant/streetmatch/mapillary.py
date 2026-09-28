@@ -22,6 +22,8 @@ class StreetImage:
     captured_at: str
     thumb_url: str
     full_url: str
+    source: str = "Mapillary"
+    page_url: str = ""
 
 
 def tiles(bbox: tuple[float, float, float, float], step: float = 0.004) -> list[tuple[float, float, float, float]]:
@@ -74,6 +76,7 @@ class MapillaryClient:
                     captured_at=_date(d.get("captured_at")),
                     thumb_url=d["thumb_256_url"],
                     full_url=d.get("thumb_1024_url") or d["thumb_256_url"],
+                    page_url=f"https://www.mapillary.com/app/?pKey={d['id']}&focus=photo",
                 )
             )
         return out

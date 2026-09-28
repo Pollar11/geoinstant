@@ -85,10 +85,14 @@ class Settings(BaseSettings):
     skyline_max_area_km2: float = 5000.0  # on-demand search area limit
     skyline_max_km: float = 40.0  # how far to render terrain
 
-    # --- Street match (compare with every street photo of an area; needs mapillary_token) --------
+    # --- Street match (compare with every street photo of an area) ------------------------------
     streetmatch_dir: str = "streetmatch"  # descriptor cache
-    vpr_encoder: str = "vpr_encoder.onnx"  # optional place-recognition model; falls back to image_encoder
+    vpr_encoder: str = "vpr_encoder.onnx"  # MegaLoc (scripts/export_vpr.py); falls back to image_encoder
+    vpr_encoder_size: int = 322
+    matcher: str = "matcher.onnx"  # LightGlue pipeline (docs/DESIGN.md); falls back to SIFT
     streetmatch_max_area_km2: float = 6.0
+    panoramax_url: str = "https://api.panoramax.xyz/api"  # open street photos, no token; "" = off
+    overpass_url: str = "https://overpass-api.de/api/interpreter"  # OSM house addresses; "" = off
 
     # --- Private photo archive (album) ------------------------------------------------------
     archive_dir: Path = Path("./archive")

@@ -20,7 +20,7 @@ from .archive.service import ArchiveService
 from .archive.store import ArchiveStore
 from .config import Settings, get_settings
 from .imageio import ImageError, decode
-from .models.embedder import load_embedder
+from .models.embedder import Embedder, OnnxImageEncoder
 from .models.investigator import Investigation
 from .nearby import Nearby, nearby
 from .pipeline import Engine
@@ -40,7 +40,10 @@ from .schemas import (
 from .skyline.extract import detect, from_trace
 from .skyline.service import SkylineService
 from .streetmatch.mapillary import MapillaryClient
+from .streetmatch.panoramax import PanoramaxClient
 from .streetmatch.service import StreetMatchService
+from .streetmatch.sources import MultiSource, StreetSource
+from .streetmatch.verify import load_matcher
 
 log = logging.getLogger("geoinstant")
 
@@ -58,15 +61,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         settings.skyline_max_area_km2,
         settings.skyline_max_km,
     )
-    vpr = settings.artifact(settings.vpr_encoder)
-    app.state.streetmatch = StreetMatchService(
-        settings.artifact(settings.streetmatch_dir),
-        load_embedder(vpr, settings.image_encoder_size, settings.onnx_providers, settings.onnx_threads)
-        if vpr.exists()
-        else app.state.engine.embedder,
-        MapillaryClient(settings.mapillary_token) if settings.mapillary_token else None,
-        settings.streetmatch_max_area_km2,
-    )
+    app.state.streetmatch = street_service(settings, app.state.engine.embedder)
     app.state.archive = None
     if settings.archive_token:
         app.state.archive = ArchiveService(
@@ -82,6 +77,32 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     if app.state.archive:
         await app.state.archive.stop()
     app.state.engine.pool.shutdown(wait=False, cancel_futures=True)
+
+
+def street_service(settings: Settings, fallback: Embedder) -> StreetMatchService:
+    vpr = settings.artifact(settings.vpr_encoder)
+    embedder: Embedder = fallback
+    if vpr.exists():
+        try:
+            # MegaLoc bakes its own normalisation into the graph (scripts/export_vpr.py).
+            embedder = OnnxImageEncoder(
+                vpr, settings.vpr_encoder_size, settings.onnx_providers, settings.onnx_threads, crop=False
+            )
+        except Exception:
+            log.exception("Failed to load %s; using the main image encoder", vpr)
+    sources: list[StreetSource] = []
+    if settings.mapillary_token:
+        sources.append(MapillaryClient(settings.mapillary_token))
+    if settings.panoramax_url:
+        sources.append(PanoramaxClient(settings.panoramax_url))
+    return StreetMatchService(
+        settings.artifact(settings.streetmatch_dir),
+        embedder,
+        MultiSource(sources) if sources else None,
+        settings.streetmatch_max_area_km2,
+        matcher=load_matcher(settings.artifact(settings.matcher), settings.onnx_providers),
+        overpass_url=settings.overpass_url,
+    )
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:

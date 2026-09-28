@@ -1,8 +1,9 @@
 """Street match (visual place recognition), the GeoSpy/Rainbolt approach.
 
 photo → compare with every street-level photo of an area (global descriptor, fast)
-      → re-check the best 60 point-by-point (SIFT + RANSAC)
-      → the verified match gives the exact spot and camera direction.
+      → re-check the best 60 point-by-point (LightGlue or SIFT, + RANSAC)
+      → the verified match gives the exact spot and camera direction
+      → OpenStreetMap gives the address of the building it faces.
 """
 
 from __future__ import annotations
@@ -19,13 +20,16 @@ from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Literal
 
+import httpx
 import numpy as np
 from PIL import Image
 from pydantic import BaseModel
 
 from ..models.embedder import Embedder
-from .mapillary import MapillaryClient, StreetImage
-from .verify import features, inliers
+from .address import Building, facing_building
+from .mapillary import StreetImage
+from .sources import StreetSource
+from .verify import Matcher, SiftMatcher
 
 log = logging.getLogger(__name__)
 
@@ -44,6 +48,8 @@ class Match(BaseModel):
     image_url: str
     similarity: float
     inliers: int
+    source: str = "Mapillary"
+    page_url: str = ""
 
 
 class StreetResult(BaseModel):
@@ -53,6 +59,7 @@ class StreetResult(BaseModel):
     searched: int
     bbox: BBox
     message: str = ""
+    building: Building | None = None
 
 
 class Job(BaseModel):
@@ -106,12 +113,17 @@ class StreetMatchService:
         self,
         cache_dir: Path,
         embedder: Embedder,
-        client: MapillaryClient | None,
+        client: StreetSource | None,
         max_area_km2: float = 6.0,
         max_images: int = 25_000,
+        matcher: Matcher | None = None,
+        overpass_url: str = "",
     ) -> None:
         self.embedder = embedder
         self.client = client
+        self.matcher = matcher or SiftMatcher()
+        self.overpass_url = overpass_url
+        self._http = httpx.AsyncClient(timeout=30)
         self.max_area_km2 = max_area_km2
         self.max_images = max_images
         self.cache = EmbeddingCache(cache_dir / f"emb_{embedder.name.replace(':', '_')}.sqlite")
@@ -136,7 +148,7 @@ class StreetMatchService:
 
     def check(self, bbox: BBox) -> None:
         if self.client is None:
-            raise ValueError("Street match needs GEOINSTANT_MAPILLARY_TOKEN")
+            raise ValueError("No street photo source is configured")
         if area_km2(bbox) > self.max_area_km2:
             raise ValueError(f"Zoom in: street match searches up to {self.max_area_km2:g} km² at a time")
 
@@ -197,22 +209,23 @@ class StreetMatchService:
         top = [int(i) for i in np.argsort(-sims)[:VERIFY_TOP]]
 
         job.status, job.message = "verifying", "Checking the best matches point by point…"
-        qf = await asyncio.to_thread(features, img)
+        mt = self.matcher
+        qf = await asyncio.to_thread(mt.prepare, img)
         scores: dict[int, int] = {}
         t0 = time.perf_counter()
 
         async def verify(i: int) -> None:
             try:
                 data = await self.client.fetch(images[i].full_url)  # type: ignore[union-attr]
-                cf = await asyncio.to_thread(lambda: features(Image.open(io.BytesIO(data)).convert("RGB")))
-                scores[i] = await asyncio.to_thread(inliers, qf, cf)
+                cf = await asyncio.to_thread(lambda: mt.prepare(Image.open(io.BytesIO(data)).convert("RGB")))
+                scores[i] = await asyncio.to_thread(mt.inliers, qf, cf)
             except Exception:  # noqa: BLE001
                 scores[i] = 0
             job.progress = 0.7 + 0.3 * len(scores) / len(top)
             job.message = f"Checking the best matches point by point {len(scores)}/{len(top)}"
 
         await asyncio.gather(*(verify(i) for i in top))
-        log.info("verified %d candidates in %.1fs", len(top), time.perf_counter() - t0)
+        log.info("verified %d candidates with %s in %.1fs", len(top), mt.name, time.perf_counter() - t0)
 
         ranked = sorted(top, key=lambda i: (-scores[i], -sims[i]))
         cands = [
@@ -225,6 +238,8 @@ class StreetMatchService:
                 image_url=images[i].full_url,
                 similarity=round(float(sims[i]), 3),
                 inliers=scores[i],
+                source=images[i].source,
+                page_url=images[i].page_url,
             )
             for i in ranked
         ]
@@ -233,8 +248,16 @@ class StreetMatchService:
         runner = max((c.inliers for c in cands[1:] if best and _dist_m(best, c) > SAME_SPOT_M), default=0)
         cands = cands[:5]
         verified = bool(best and best.inliers >= VERIFIED_INLIERS and best.inliers >= 1.5 * max(runner, 1))
+        building = None
+        if verified and best and self.overpass_url:
+            try:
+                building = await facing_building(self._http, self.overpass_url, best.latitude, best.longitude, best.heading)
+            except Exception:  # noqa: BLE001 - the spot stands without an address
+                log.warning("address lookup failed", exc_info=True)
         if verified and best:
             msg = f"Same place: {best.inliers} matching points with a street photo from {best.captured_at or 'an unknown date'}."
         else:
             msg = f"No street photo here matches for certain ({len(images):,} checked). Try a neighbouring area."
-        return StreetResult(verified=verified, best=best, candidates=cands, searched=len(images), bbox=bbox, message=msg)
+        return StreetResult(
+            verified=verified, best=best, candidates=cands, searched=len(images), bbox=bbox, message=msg, building=building
+        )

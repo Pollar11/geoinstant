@@ -134,8 +134,10 @@ export default function Album() {
   }
 
   async function pinStreetSpot(m: StreetMatch) {
-    const place = await reverse(m.latitude, m.longitude).catch(() => null);
-    await patch({ user_lat: m.latitude, user_lon: m.longitude, user_label: place?.display_name ?? formatCoord(m.latitude, m.longitude, 5) });
+    const house = street?.best?.image_id === m.image_id && street.building?.in_view ? street.building.address : null;
+    const place = house ? null : await reverse(m.latitude, m.longitude).catch(() => null);
+    const label = house ?? place?.display_name ?? formatCoord(m.latitude, m.longitude, 5);
+    await patch({ user_lat: m.latitude, user_lon: m.longitude, user_label: label });
   }
 
   async function addFiles(list: FileList | null) {

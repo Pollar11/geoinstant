@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ExternalLink, Loader2, ScanSearch } from "lucide-react";
+import { Check, ExternalLink, Home, Loader2, ScanSearch } from "lucide-react";
 
 import { areaKm2 } from "@/components/SkylinePanel";
 import { Badge } from "@/components/ui/badge";
@@ -68,6 +68,16 @@ export function StreetMatchPanel(p: Props) {
               <span className="text-xs text-muted-foreground">{r.searched.toLocaleString()} street photos compared</span>
             </div>
             <p>{r.message}</p>
+            {r.verified && r.building && (
+              <p className="flex items-start gap-2 rounded-md border border-primary/30 bg-primary/5 p-2">
+                <Home className="mt-0.5 size-4 shrink-0 text-primary" />
+                <span>
+                  <span className="font-semibold">{r.building.in_view ? "Facing" : "Nearest address"}: </span>
+                  {r.building.address}
+                  <span className="text-xs text-muted-foreground"> · {Math.round(r.building.distance_m)} m from the camera (OpenStreetMap)</span>
+                </span>
+              </p>
+            )}
             {m && (
               <>
                 <div className="grid grid-cols-2 gap-2">
@@ -80,7 +90,7 @@ export function StreetMatchPanel(p: Props) {
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={m.image_url} alt="Matching street photo" className="aspect-[4/3] w-full rounded object-cover" />
                     <figcaption className="text-xs text-muted-foreground">
-                      Now · {m.captured_at || "date unknown"} · {m.inliers} matching points
+                      Now · {m.captured_at || "date unknown"} · {m.inliers} matching points · © {m.source} contributors
                     </figcaption>
                   </figure>
                 </div>
@@ -88,7 +98,7 @@ export function StreetMatchPanel(p: Props) {
                   <Button size="sm" onClick={() => p.onUse(m)}>
                     <Check /> Use this spot
                   </Button>
-                  <a href={`https://www.mapillary.com/app/?pKey=${m.image_id}&focus=photo`} target="_blank" rel="noreferrer">
+                  <a href={m.page_url || `https://www.mapillary.com/app/?pKey=${m.image_id}&focus=photo`} target="_blank" rel="noreferrer">
                     <Button size="sm" variant="outline">
                       <ExternalLink /> Look around here
                     </Button>
@@ -116,8 +126,8 @@ export function StreetMatchPanel(p: Props) {
           </div>
         )}
         <p className="text-xs text-muted-foreground">
-          Needs street photos of the area on Mapillary and a place that still looks similar (same buildings, windows,
-          rooflines).
+          Searches Mapillary and Panoramax street photos. Needs coverage of the area and a place that still looks
+          similar (same buildings, windows, rooflines).
         </p>
       </CardContent>
     </Card>

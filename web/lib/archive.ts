@@ -42,6 +42,8 @@ export const StreetMatch = z.object({
   image_url: z.string(),
   similarity: z.number(),
   inliers: z.number(),
+  source: z.string().default("Mapillary"),
+  page_url: z.string().default(""),
 });
 export type StreetMatch = z.infer<typeof StreetMatch>;
 
@@ -52,6 +54,10 @@ export const StreetResult = z.object({
   searched: z.number(),
   bbox: z.tuple([z.number(), z.number(), z.number(), z.number()]),
   message: z.string(),
+  building: z
+    .object({ address: z.string(), latitude: z.number(), longitude: z.number(), distance_m: z.number(), in_view: z.boolean() })
+    .nullable()
+    .optional(),
 });
 export type StreetResult = z.infer<typeof StreetResult>;
 
