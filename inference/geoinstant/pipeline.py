@@ -27,14 +27,18 @@ from .gazetteer import Gazetteer, load_countries
 from .imageio import GpsFix, ImageError, decode, extract_gps
 from .models.detector import NullDetector, load_detector
 from .models.embedder import HashEmbedder, load_embedder
+from .models.investigator import load_investigator
 from .models.ocr import NullOcr, load_ocr
 from .models.vlm import VlmResult, load_vlm
 from .runtime import TtlLru, coarsen, people_are_main_subject
 from .schemas import (
+    Analysis,
+    Clue,
     DoneEvent,
     ErrorEvent,
     Event,
     EvidenceItem,
+    Guess,
     HierarchyNode,
     LocateResult,
     Place,
@@ -68,6 +72,14 @@ class Engine:
         self.detector = load_detector(s.artifact(s.detector), s.artifact(s.detector_classes), s.onnx_providers)
         self.ocr = load_ocr()
         self.vlm = load_vlm(s.vlm_mode, s.vlm_model, s.vlm_effort, s.anthropic_api_key)
+        self.investigator = load_investigator(
+            s.investigator_mode,
+            s.investigator_model,
+            s.investigator_effort,
+            s.anthropic_api_key,
+            s.geocode_url,
+            s.geocode_user_agent,
+        )
         self.cues = CueKnowledgeBase(s.cue_priors, countries)
         self.results: TtlLru[LocateResult] = TtlLru(s.result_cache_size, s.result_cache_ttl_s)
         self.embeddings: TtlLru[NDArray[np.float32]] = TtlLru(s.result_cache_size, s.result_cache_ttl_s)
@@ -99,9 +111,10 @@ class Engine:
         return await asyncio.get_running_loop().run_in_executor(self.pool, partial(fn, *args))
 
     # ---- the pipeline -----------------------------------------------------------------------
-    async def locate(self, data: bytes, vlm_mode: str | None = None) -> AsyncIterator[Event]:
+    async def locate(self, data: bytes, vlm_mode: str | None = None, people_policy: str | None = None) -> AsyncIterator[Event]:
         s = self.settings
         vlm_mode = vlm_mode or s.vlm_mode
+        policy = people_policy or s.people_precision_policy
         t0 = time.perf_counter()
         rid = uuid.uuid4().hex
         timings: dict[str, float] = {}
@@ -113,7 +126,7 @@ class Engine:
         if gps is not None:
             yield StageEvent(stage="metadata", status="done", ms=timings["metadata"], detail=f"{gps.source.upper()} GPS found")
             timings["total"] = _ms(t0)
-            yield ResultEvent(type="result", result=self._gps_result(rid, gps, timings))
+            yield ResultEvent(type="result", result=self.gps_result(rid, gps, timings))
             yield DoneEvent(request_id=rid, total_ms=_ms(t0))
             return
         yield StageEvent(stage="metadata", status="skipped", ms=timings["metadata"], detail="No GPS metadata")
@@ -129,7 +142,7 @@ class Engine:
         yield StageEvent(stage="decode", status="done", ms=timings["decode"])
         img = decoded.image
 
-        cache_key = f"{decoded.sha256}:{vlm_mode}"
+        cache_key = f"{decoded.sha256}:{vlm_mode}:{policy}"
         cached = self.results.get(cache_key)
         if cached is not None:
             timings["total"] = _ms(t0)
@@ -188,7 +201,7 @@ class Engine:
             if evidences and slow_stages_pending and has_slow_stages:
                 # Progressive result: coarse answer while detectors finish.
                 fused = self._fuse(evidences)
-                yield ResultEvent(type="partial", result=self._visual_result(rid, "partial", fused, dict(timings), False))
+                yield ResultEvent(type="partial", result=self._visual_result(rid, "partial", fused, dict(timings), False, policy))
 
         # B. Cue detector + OCR, bounded by the fast deadline.
         stage_ev, detections = await self._bounded(
@@ -216,7 +229,7 @@ class Engine:
         fused = self._fuse(evidences)
         timings["fusion"] = _ms(t)
         timings["total"] = _ms(t0)
-        final = self._visual_result(rid, "final", fused, dict(timings), people)
+        final = self._visual_result(rid, "final", fused, dict(timings), people, policy, vlm_result)
         yield ResultEvent(type="result", result=final)
         self.results.set(cache_key, final)
 
@@ -228,7 +241,7 @@ class Engine:
                 people = people or bool(vlm_result and vlm_result.answer.people_are_main_subject)
                 fused = self._fuse(evidences + extra)
                 timings["total_refined"] = _ms(t0)
-                refined = self._visual_result(rid, "refined", fused, dict(timings), people)
+                refined = self._visual_result(rid, "refined", fused, dict(timings), people, policy, vlm_result)
                 self.results.set(cache_key, refined)
                 yield ResultEvent(type="refined", result=refined)
 
@@ -292,10 +305,19 @@ class Engine:
         s = self.settings
         return fuse(self.tree, self.gazetteer, evidences, s.resolution_min_mass, s.calibration_temperature)
 
-    def _visual_result(self, rid: str, stage: str, f: Fused, timings: dict[str, float], people: bool) -> LocateResult:
+    def _visual_result(
+        self,
+        rid: str,
+        stage: str,
+        f: Fused,
+        timings: dict[str, float],
+        people: bool,
+        policy: str,
+        vlm: VlmResult | None = None,
+    ) -> LocateResult:
         lat, lon, radius, resolution, place = f.latitude, f.longitude, f.radius_km, f.resolution, f.place
         privacy = Privacy()
-        if people and self.settings.people_precision_policy == "coarsen":
+        if people and policy == "coarsen":
             lat, lon, radius = coarsen(lat, lon, radius, self.settings.coarsen_radius_km)
             if resolution in ("street", "city"):
                 resolution = "city"
@@ -319,9 +341,10 @@ class Engine:
             mode=self.mode,
             models=self.models,
             privacy=privacy,
+            analysis=_analysis(vlm),
         )
 
-    def _gps_result(self, rid: str, gps: GpsFix, timings: dict[str, float]) -> LocateResult:
+    def gps_result(self, rid: str, gps: GpsFix, timings: dict[str, float]) -> LocateResult:
         pl = self.gazetteer.reverse(gps.latitude, gps.longitude)
         place = Place(
             name=pl.name,
@@ -362,3 +385,26 @@ class Engine:
             mode=self.mode,
             models=self.models,
         )
+
+
+def _analysis(vlm: VlmResult | None) -> Analysis | None:
+    if vlm is None:
+        return None
+    a = vlm.answer
+    return Analysis(
+        scene=a.scene,
+        era=a.era,
+        model=vlm.model,
+        clues=[Clue(category=c.category, clue=c.clue, implies=c.implies, strength=c.strength) for c in a.clues],
+        guesses=[
+            Guess(
+                label=c.label,
+                country_code=c.country_code,
+                latitude=c.latitude,
+                longitude=c.longitude,
+                probability=c.probability,
+                radius_km=c.radius_km,
+            )
+            for c in a.candidates
+        ],
+    )

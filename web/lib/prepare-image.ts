@@ -6,7 +6,7 @@ export const ACCEPT = "image/jpeg,image/png,image/webp,image/heic,image/heif,.he
 export const MAX_BYTES = 25 * 1024 * 1024;
 
 export type PreparedImage =
-  | { kind: "gps"; latitude: number; longitude: number; capturedAt: string | null; previewUrl: string }
+  | { kind: "gps"; latitude: number; longitude: number; capturedAt: string | null; previewUrl: string; blob: Blob }
   | { kind: "upload"; blob: Blob; contentType: string; previewUrl: string; width: number; height: number };
 
 export class PrepareError extends Error {}
@@ -30,7 +30,7 @@ export function targetSize(width: number, height: number, maxEdge = MAX_EDGE): {
   return { width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)) };
 }
 
-async function downscale(file: Blob): Promise<{ blob: Blob; width: number; height: number } | null> {
+export async function downscale(file: Blob, maxEdge = MAX_EDGE): Promise<{ blob: Blob; width: number; height: number } | null> {
   let bitmap: ImageBitmap;
   try {
     // imageOrientation "from-image" applies the EXIF rotation before we drop the metadata.
@@ -38,7 +38,7 @@ async function downscale(file: Blob): Promise<{ blob: Blob; width: number; heigh
   } catch {
     return null; // e.g. HEIC in Chrome/Firefox
   }
-  const { width, height } = targetSize(bitmap.width, bitmap.height);
+  const { width, height } = targetSize(bitmap.width, bitmap.height, maxEdge);
   let blob: Blob | null = null;
   if (typeof OffscreenCanvas !== "undefined") {
     const canvas = new OffscreenCanvas(width, height);
@@ -62,7 +62,7 @@ export async function prepareImage(file: File): Promise<PreparedImage> {
   const gps = await readGps(file);
   const small = await downscale(file);
   const previewUrl = URL.createObjectURL(small?.blob ?? file);
-  if (gps) return { kind: "gps", ...gps, previewUrl };
+  if (gps) return { kind: "gps", ...gps, previewUrl, blob: small?.blob ?? file };
   if (small) return { kind: "upload", contentType: "image/jpeg", previewUrl, ...small };
   return { kind: "upload", blob: file, contentType: file.type || "application/octet-stream", previewUrl, width: 0, height: 0 };
 }

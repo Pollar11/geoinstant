@@ -39,6 +39,25 @@ curl -X POST 'localhost:8000/v1/locate?vlm=off' -H 'Content-Type: image/jpeg' --
 
 Same input. Returns Server-Sent Events: `stage`* → `partial`? → `result` → `refined`? → `done` (or `error`).
 
+## POST /v1/skyline
+
+Multipart fields: `image`; `bbox` = `[south, west, north, east]`; optional `trace` = `[[x, y], …]` (normalised image coordinates).
+
+```json
+{
+  "status": "ok",
+  "confidence": 74.2,
+  "viewpoints": 2115,
+  "candidates": [
+    { "latitude": 45.98534, "longitude": 7.787508, "elevation_m": 3049, "azimuth_deg": 162, "fov_deg": 40, "fit_error": 0.08, "match": 1.0, "place": { "display_name": "…" } }
+  ],
+  "profile": [[0.01, 0.31, 1.0]],
+  "heat": [[45.98, 7.78, 1.0]]
+}
+```
+
+`status` is one of `ok`, `too_flat`, `no_area`, `area_too_large`, `no_data`. `GET /v1/skyline/coverage` lists the prebuilt regions.
+
 ## GET /v1/reverse?lat=&lon=
 
 Returns a `Place` for a coordinate.
@@ -50,6 +69,12 @@ Returns a `Place` for a coordinate.
 ```
 
 Returns `{ "accepted": true, "feedback_id": "…", "stored_image": false, "stored_embedding": true }`
+
+## POST /v1/archive/photos/{id}/streetmatch
+
+Album only (`X-Archive-Token`). Body `{"bbox": [s, w, n, e]}`, ≤ 6 km². Returns a job: `{id, status, progress, message, result}`.
+
+Poll `GET /v1/archive/streetmatch/{job_id}`. The result has `verified`, `best`, `candidates[]` (`latitude`, `longitude`, `heading`, `captured_at`, `image_url`, `inliers`) and `searched`. A verified result becomes the photo's exact location.
 
 ## GET /healthz
 

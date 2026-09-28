@@ -10,6 +10,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     GEOINSTANT_ARTIFACTS_DIR=/artifacts \
     GEOINSTANT_FEEDBACK_DIR=/feedback \
+    GEOINSTANT_ARCHIVE_DIR=/archive \
     # Persist TensorRT engines so restarts don't rebuild them (cold start < 2 s).
     ORT_TENSORRT_ENGINE_CACHE_ENABLE=1 \
     ORT_TENSORRT_CACHE_PATH=/artifacts/trt-cache \
@@ -21,7 +22,7 @@ COPY geoinstant ./geoinstant
 RUN pip install . "${ORT}" "rapidocr_onnxruntime>=1.3" && \
     if [ "${ORT}" != "onnxruntime" ]; then pip uninstall -y onnxruntime || true; fi
 
-RUN useradd --create-home --uid 10001 app && mkdir -p /artifacts /feedback && chown app /feedback
+RUN useradd --create-home --uid 10001 app && mkdir -p /artifacts /feedback /archive /cache && chown app /artifacts /feedback /archive /cache
 USER app
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=3s --start-period=20s CMD python -c "import urllib.request,sys; sys.exit(urllib.request.urlopen('http://127.0.0.1:8000/healthz').status != 200)"

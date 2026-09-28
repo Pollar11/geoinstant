@@ -58,6 +58,14 @@ class Settings(BaseSettings):
     vlm_deadline_ms: int = 12_000
     anthropic_api_key: str | None = Field(default=None, validation_alias="ANTHROPIC_API_KEY")
 
+    # --- Investigator (Claude agent with zoom, web search and map lookup) --------------------
+    investigator_mode: Literal["on", "off"] = "on"
+    investigator_model: str = "claude-opus-5"
+    investigator_effort: Literal["low", "medium", "high"] = "medium"
+    geocode_url: str = "https://nominatim.openstreetmap.org"  # OSM Nominatim (max 1 request/s)
+    geocode_user_agent: str = "GeoInstant/1.0 (private family photo archive)"
+    mapillary_token: str = ""  # free client token from mapillary.com/dashboard/developers → recent street photos
+
     # --- Privacy / abuse -------------------------------------------------------------------
     # City-level precision at most when people are the main subject.
     people_precision_policy: Literal["coarsen", "off"] = "coarsen"
@@ -69,6 +77,33 @@ class Settings(BaseSettings):
     rate_limit_burst: int = 10
     trusted_proxy_hops: int = 1  # how many X-Forwarded-For hops to trust
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3300"])
+
+    # --- Skyline (mountain) matching ----------------------------------------------------
+    skyline_dir: str = "skyline"  # prebuilt region indexes (scripts/build_skyline_index.py) + on-demand cache
+    dem_dir: str = "dem"  # SRTM .hgt tiles
+    dem_tile_url: str = "https://s3.amazonaws.com/elevation-tiles-prod/skadi/{ns}/{name}.hgt.gz"  # "" = offline
+    skyline_max_area_km2: float = 5000.0  # on-demand search area limit
+    skyline_max_km: float = 40.0  # how far to render terrain
+
+    # --- Street match (compare with every street photo of an area) ------------------------------
+    streetmatch_dir: str = "streetmatch"  # descriptor cache
+    vpr_encoder: str = "vpr_encoder.onnx"  # MegaLoc (scripts/export_vpr.py); falls back to image_encoder
+    vpr_encoder_size: int = 322
+    matcher: str = "matcher.onnx"  # LightGlue pipeline (docs/DESIGN.md); falls back to SIFT
+    streetmatch_max_area_km2: float = 6.0
+    panoramax_url: str = "https://api.panoramax.xyz/api"  # open street photos, no token; "" = off
+    overpass_url: str = "https://overpass-api.de/api/interpreter"  # OSM house addresses; "" = off
+
+    # --- Private photo archive (album) ------------------------------------------------------
+    archive_dir: Path = Path("./archive")
+    archive_token: str = ""  # shared secret with the web app; empty = archive disabled
+    archive_people_policy: Literal["coarsen", "off"] = "off"  # your own family photos: full precision
+    archive_concurrency: int = 3
+    archive_investigate: bool = True  # run the investigator on every album photo (uses web search)
+    archive_auto_search: bool = True  # then street/skyline match around its lead automatically
+    auto_street_km2: float = 25.0  # city-level lead: search up to 5 x 5 km around it
+    auto_skyline_km: float = 20.0  # mountain photos: search 40 x 40 km around the lead
+    archive_max_files_per_upload: int = 100
 
     # --- Feedback / continuous learning ----------------------------------------------------
     feedback_dir: Path = Path("./feedback")

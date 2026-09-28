@@ -38,6 +38,7 @@ class OnnxImageEncoder:
         threads: int = 0,
         mean: NDArray[np.float32] = CLIP_MEAN,
         std: NDArray[np.float32] = CLIP_STD,
+        crop: bool = True,
     ) -> None:
         import onnxruntime as ort
 
@@ -50,11 +51,16 @@ class OnnxImageEncoder:
         self.input_name = self.session.get_inputs()[0].name
         self.size = size
         self.mean, self.std = mean, std
+        self.crop = crop
         self.name = f"onnx:{path.name}"
         self.dim = int(self.session.get_outputs()[0].shape[-1])
         self.embed(Image.new("RGB", (size, size)))  # warm-up: builds TensorRT engines / CUDA graphs
 
     def preprocess(self, image: Image.Image) -> NDArray[np.float32]:
+        if not self.crop:  # place recognition: keep the whole view
+            img = image.convert("RGB").resize((self.size, self.size), Image.Resampling.BICUBIC)
+            x = (np.asarray(img, dtype=np.float32) / 255.0 - self.mean) / self.std
+            return x.transpose(2, 0, 1)[None]
         # Resize shortest side then centre-crop: what CLIP-family encoders were trained on.
         w, h = image.size
         s = self.size / min(w, h)

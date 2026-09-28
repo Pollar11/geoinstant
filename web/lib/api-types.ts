@@ -49,6 +49,26 @@ export const RegionBox = z.object({
 });
 export type RegionBox = z.infer<typeof RegionBox>;
 
+export const Analysis = z.object({
+  scene: z.string(),
+  era: z.string(),
+  model: z.string(),
+  clues: z.array(
+    z.object({ category: z.string(), clue: z.string(), implies: z.string(), strength: z.enum(["strong", "medium", "weak"]) }),
+  ),
+  guesses: z.array(
+    z.object({
+      label: z.string(),
+      country_code: z.string(),
+      latitude: z.number().nullable(),
+      longitude: z.number().nullable(),
+      probability: z.number(),
+      radius_km: z.number(),
+    }),
+  ),
+});
+export type Analysis = z.infer<typeof Analysis>;
+
 export const LocateResult = z.object({
   request_id: z.string(),
   stage: z.enum(["partial", "final", "refined"]),
@@ -70,6 +90,7 @@ export const LocateResult = z.object({
   models: z.record(z.string(), z.string()),
   privacy: z.object({ coarsened: z.boolean(), reason: z.string().nullable(), stored: z.boolean() }),
   cached: z.boolean(),
+  analysis: Analysis.nullable().optional(),
 });
 export type LocateResult = z.infer<typeof LocateResult>;
 
@@ -106,3 +127,85 @@ export const FeedbackResponse = z.object({
   stored_image: z.boolean(),
   stored_embedding: z.boolean(),
 });
+
+export const SkylineCandidate = z.object({
+  latitude: z.number(),
+  longitude: z.number(),
+  elevation_m: z.number(),
+  azimuth_deg: z.number(),
+  fov_deg: z.number(),
+  fit_error: z.number(),
+  match: z.number(),
+  place: Place,
+});
+export type SkylineCandidate = z.infer<typeof SkylineCandidate>;
+
+export type BBox = [number, number, number, number]; // south, west, north, east
+
+export const SkylineResult = z.object({
+  status: z.enum(["ok", "too_flat", "no_area", "area_too_large", "no_data"]),
+  message: z.string(),
+  confidence: z.number(),
+  profile: z.array(z.tuple([z.number(), z.number(), z.number()])),
+  traced: z.boolean(),
+  relief_deg: z.number(),
+  search_area: z.tuple([z.number(), z.number(), z.number(), z.number()]).nullable(),
+  viewpoints: z.number(),
+  spacing_km: z.number(),
+  candidates: z.array(SkylineCandidate),
+  heat: z.array(z.tuple([z.number(), z.number(), z.number()])),
+  timings_ms: z.record(z.string(), z.number()),
+});
+export type SkylineResult = z.infer<typeof SkylineResult>;
+
+export const InvestigationStep = z.object({
+  kind: z.enum(["note", "zoom", "search", "geocode", "reverse", "error"]),
+  text: z.string(),
+  box: z.tuple([z.number(), z.number(), z.number(), z.number()]).nullable(),
+});
+export type InvestigationStep = z.infer<typeof InvestigationStep>;
+
+export const InvestigationReport = z.object({
+  latitude: z.number().nullable(),
+  longitude: z.number().nullable(),
+  precision: z.enum(["exact", "street", "neighborhood", "city", "region", "country", "unknown"]),
+  confidence: z.number(),
+  place_name: z.string(),
+  address: z.string(),
+  summary: z.string(),
+  evidence_chain: z.array(z.object({ clue: z.string(), conclusion: z.string() })),
+  people_are_main_subject: z.boolean().optional(),
+});
+export type InvestigationReport = z.infer<typeof InvestigationReport>;
+
+export const Investigation = z.object({
+  report: InvestigationReport.nullable(),
+  steps: z.array(InvestigationStep),
+  model: z.string(),
+  seconds: z.number(),
+});
+export type Investigation = z.infer<typeof Investigation>;
+
+export const InvestigateEvent = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("step"), step: InvestigationStep }),
+  z.object({ type: z.literal("report"), investigation: Investigation }),
+]);
+
+export const Nearby = z.object({
+  images: z.array(
+    z.object({
+      id: z.string(),
+      thumb_url: z.string(),
+      captured_at: z.string().nullable(),
+      latitude: z.number(),
+      longitude: z.number(),
+      compass_angle: z.number().nullable(),
+      distance_m: z.number(),
+    }),
+  ),
+  street_view_url: z.string(),
+  mapillary_url: z.string(),
+  satellite_url: z.string(),
+  note: z.string(),
+});
+export type Nearby = z.infer<typeof Nearby>;
