@@ -1,6 +1,19 @@
 "use client";
 
-import { AlertTriangle, Camera, Globe, Loader2, MapPin, MessageSquare, Satellite, Search, Sparkles, ZoomIn } from "lucide-react";
+import {
+  AlertTriangle,
+  Camera,
+  Globe,
+  Image as ImageIcon,
+  Images,
+  Loader2,
+  MapPin,
+  MessageSquare,
+  Satellite,
+  Search,
+  Sparkles,
+  ZoomIn,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -11,7 +24,16 @@ import { nearby } from "@/lib/client";
 import { formatCoord } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-const STEP_ICON = { note: MessageSquare, zoom: ZoomIn, search: Search, geocode: MapPin, reverse: Globe, error: AlertTriangle } as const;
+const STEP_ICON = {
+  note: MessageSquare,
+  zoom: ZoomIn,
+  search: Search,
+  geocode: MapPin,
+  reverse: Globe,
+  image_search: ImageIcon,
+  view: Images,
+  error: AlertTriangle,
+} as const;
 /** Only a verified street/building-level answer counts as a location; anything coarser is a lead. */
 export function isPinned(r: InvestigationReport): boolean {
   return (r.precision === "exact" || r.precision === "street") && r.latitude != null && r.longitude != null && r.confidence >= 0.5;

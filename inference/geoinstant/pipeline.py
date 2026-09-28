@@ -79,6 +79,7 @@ class Engine:
             s.anthropic_api_key,
             s.geocode_url,
             s.geocode_user_agent,
+            s.google_vision_key,
         )
         self.cues = CueKnowledgeBase(s.cue_priors, countries)
         self.results: TtlLru[LocateResult] = TtlLru(s.result_cache_size, s.result_cache_ttl_s)

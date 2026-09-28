@@ -1,9 +1,12 @@
 from types import SimpleNamespace as NS
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from PIL import Image
 
 from geoinstant.models.investigator import Investigation, Investigator, Step
+
+if TYPE_CHECKING:
+    from geoinstant.models.reverse_image import ReverseImage
 
 
 def block(type_: str, **kw: Any) -> NS:
@@ -111,3 +114,96 @@ def test_coarsened_for_people() -> None:
     r = Report.model_validate({**REPORT, "people_are_main_subject": True}).coarsened()
     assert r.precision == "city" and r.address == "" and r.latitude == 36.5 and r.evidence_chain == []
     assert Report.model_validate(REPORT).coarsened().precision == "street"
+
+
+def fake_reverse() -> "ReverseImage":
+    import httpx
+
+    from geoinstant.models.reverse_image import ReverseImage
+
+    from .conftest import jpeg_bytes, synthetic_photo
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        if req.url.host == "vision.googleapis.com":
+            assert req.url.params["key"] == "k" and "WEB_DETECTION" in req.content.decode()
+            web = {
+                "bestGuessLabels": [{"label": "cafe restroom"}],
+                "webEntities": [{"description": "Café Luna Zürich", "score": 0.8}],
+                "pagesWithMatchingImages": [{"url": "https://reviews.test/cafe-luna", "pageTitle": "Café Luna - photos"}],
+                "visuallySimilarImages": [{"url": "https://img.test/luna-restroom.jpg"}],
+            }
+            return httpx.Response(200, json={"responses": [{"webDetection": web}]})
+        return httpx.Response(200, content=jpeg_bytes(synthetic_photo(3)), headers={"content-type": "image/jpeg"})
+
+    async def ok(url: str) -> None:
+        return None
+
+    return ReverseImage("k", http=httpx.AsyncClient(transport=httpx.MockTransport(handler)), resolve=ok)
+
+
+async def test_interior_found_by_reverse_image_search() -> None:
+    client = FakeClient(
+        [
+            [
+                block(
+                    "tool_use",
+                    id="r1",
+                    name="reverse_image_search",
+                    input={"why": "whole photo", "people_are_main_subject": False},
+                )
+            ],
+            [
+                block(
+                    "tool_use",
+                    id="v1",
+                    name="view_image",
+                    input={"url": "https://img.test/luna-restroom.jpg", "why": "same lamp?"},
+                )
+            ],
+            [block("tool_use", id="t3", name="report_location", input=REPORT)],
+        ]
+    )
+    inv = Investigator(client, "claude-opus-5", "medium", "https://example.invalid", "test", reverse=fake_reverse())
+    events = [ev async for ev in inv.run(Image.new("RGB", (800, 600)), people_policy="coarsen")]
+    steps = [e for e in events if isinstance(e, Step)]
+    assert [s.kind for s in steps] == ["image_search", "view"]
+    assert "(2 leads)" in steps[0].text and "img.test" in steps[1].text
+    names = {t.get("name") for t in client.calls[0]["tools"]}
+    assert {"reverse_image_search", "view_image", "web_fetch", "web_search"} <= names
+    found = client.calls[1]["messages"][-1]["content"][0]["content"][0]["text"]
+    assert "Café Luna Zürich" in found and "https://reviews.test/cafe-luna" in found
+    viewed = client.calls[2]["messages"][-1]["content"][0]["content"][0]
+    assert viewed["type"] == "image"
+
+
+async def test_reverse_search_respects_the_people_rule() -> None:
+    call = {"why": "whole photo", "people_are_main_subject": True}
+    for policy, allowed in (("coarsen", False), ("off", True)):
+        client = FakeClient([[block("tool_use", id="r1", name="reverse_image_search", input=call)]])
+        inv = Investigator(client, "claude-opus-5", "medium", "https://example.invalid", "test", reverse=fake_reverse())
+        events = [ev async for ev in inv.run(Image.new("RGB", (400, 300)), people_policy=policy)]
+        first = next(e for e in events if isinstance(e, Step))
+        assert (first.kind == "image_search") is allowed
+
+
+async def test_no_vision_key_no_reverse_tools() -> None:
+    client = FakeClient([[block("tool_use", id="t", name="report_location", input=REPORT)]])
+    await run(client)
+    names = {t.get("name") for t in client.calls[0]["tools"]}
+    assert "reverse_image_search" not in names and "web_fetch" in names
+
+
+async def test_view_image_only_fetches_public_hosts() -> None:
+    import pytest
+
+    from geoinstant.models.reverse_image import _resolve_public
+
+    for url in (
+        "http://127.0.0.1/x.jpg",
+        "http://169.254.169.254/latest",
+        "http://10.0.0.5/a.png",
+        "file:///etc/passwd",
+        "ftp://x.test/a",
+    ):
+        with pytest.raises(ValueError):
+            await _resolve_public(url)

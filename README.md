@@ -86,6 +86,20 @@ Open the site and drop in a photo:
 
 When people are the main subject, the public page stays at city level and skips the exact search. The server only accepts a street search with a lead it signed for that exact photo.
 
+## Interiors: reverse image search
+
+Restrooms, bars, cafés and hotel rooms have no street to match, but venues have interior photos online. With `GEOINSTANT_GOOGLE_VISION_KEY` set, the investigation can:
+1. **Reverse-search the photo and its details** (a lamp, tiles, a mural): pages with matching or similar photos, names, landmarks.
+2. **Read those pages and look at the candidate photos** next to yours.
+3. **Claim a venue only when several details match**, then pin its address.
+
+It doesn't search when people are the main subject (public page). Private homes have no photos online, so they can't be found this way.
+
+**Key:**
+1. In Google Cloud Console, create a project and enable **Cloud Vision API**.
+2. Go to **APIs & Services → Credentials → Create API key** and restrict the key to Cloud Vision.
+3. The first 1,000 searches a month are free.
+
 ## Save this place (new photos)
 
 At a place you'll want to remember, open `/album` on your phone and tap **Save this place**:

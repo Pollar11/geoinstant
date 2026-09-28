@@ -159,7 +159,7 @@ export const SkylineResult = z.object({
 export type SkylineResult = z.infer<typeof SkylineResult>;
 
 export const InvestigationStep = z.object({
-  kind: z.enum(["note", "zoom", "search", "geocode", "reverse", "error"]),
+  kind: z.enum(["note", "zoom", "search", "geocode", "reverse", "image_search", "view", "error"]),
   text: z.string(),
   box: z.tuple([z.number(), z.number(), z.number(), z.number()]).nullable(),
 });
