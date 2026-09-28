@@ -9,6 +9,7 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       GEOINSTANT_CORS_ORIGINS: '["http://localhost:3300"]'
       GEOINSTANT_ARCHIVE_TOKEN: ${ARCHIVE_TOKEN:-change-me-archive-token}
+      GEOINSTANT_MAPILLARY_TOKEN: ${MAPILLARY_TOKEN:-}
     volumes:
       - ./inference/artifacts:/artifacts
       - feedback:/feedback

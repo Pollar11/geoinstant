@@ -1,5 +1,15 @@
 /** Browser-side API calls (all go through this app's /api routes, never to the inference host). */
-import { FeedbackResponse, LocateEvent, LocateResult, Place, SkylineResult, type BBox, type FeedbackRequest } from "./api-types";
+import {
+  FeedbackResponse,
+  InvestigateEvent,
+  LocateEvent,
+  LocateResult,
+  Nearby,
+  Place,
+  SkylineResult,
+  type BBox,
+  type FeedbackRequest,
+} from "./api-types";
 import { readSse } from "./sse";
 
 export class ApiError extends Error {
@@ -91,4 +101,24 @@ export async function skylineSearch(image: Blob, bbox: BBox, trace: [number, num
   const res = await fetch("/api/skyline", { method: "POST", body: form, signal });
   if (!res.ok) throw await errorFrom(res);
   return SkylineResult.parse(await res.json());
+}
+
+export async function* investigate(image: Blob, context: string, signal?: AbortSignal) {
+  const form = new FormData();
+  form.append("image", image, "photo.jpg");
+  if (context.trim()) form.append("context", context.trim());
+  const res = await fetch("/api/investigate", { method: "POST", body: form, signal });
+  if (!res.ok || !res.body) throw await errorFrom(res);
+  for await (const data of readSse(res.body, signal)) {
+    const parsed = InvestigateEvent.safeParse(JSON.parse(data));
+    if (parsed.success) yield parsed.data;
+  }
+}
+
+export async function nearby(lat: number, lon: number, heading?: number) {
+  const q = new URLSearchParams({ lat: String(lat), lon: String(lon) });
+  if (heading != null) q.set("heading", String(Math.round(heading)));
+  const res = await fetch(`/api/nearby?${q}`);
+  if (!res.ok) throw await errorFrom(res);
+  return Nearby.parse(await res.json());
 }

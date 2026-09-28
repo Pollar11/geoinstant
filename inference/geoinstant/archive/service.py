@@ -7,9 +7,11 @@ import logging
 import uuid
 from typing import Any, Literal
 
+from PIL import Image
 from pydantic import BaseModel
 
 from ..imageio import GpsFix
+from ..models.investigator import Investigation
 from ..pipeline import Engine
 from ..schemas import ErrorEvent, LocateResult, ResultEvent
 from .store import ArchiveStore, Row
@@ -49,6 +51,7 @@ class PhotoSummary(BaseModel):
 class PhotoDetail(PhotoSummary):
     note: str | None
     result: LocateResult | None
+    investigation: Investigation | None = None
 
 
 class Group(BaseModel):
@@ -56,6 +59,16 @@ class Group(BaseModel):
     name: str
     photo_ids: list[str]
     location: Location | None
+
+
+INVESTIGATION_RES = {
+    "exact": "exact",
+    "street": "street",
+    "neighborhood": "street",
+    "city": "city",
+    "region": "region",
+    "country": "country",
+}
 
 
 def own_location(row: Row) -> Location | None:
@@ -68,17 +81,32 @@ def own_location(row: Row) -> Location | None:
             confidence=100,
             resolution="exact",
         )
+    options: list[Location] = []
     r = row.result
-    if not r or r.get("resolution") == "world":
-        return None
-    return Location(
-        latitude=r["latitude"],
-        longitude=r["longitude"],
-        label=r["place"]["display_name"],
-        source="photo",
-        confidence=r["confidence"],
-        resolution=r["resolution"],
-    )
+    if r and r.get("resolution") != "world":
+        options.append(
+            Location(
+                latitude=r["latitude"],
+                longitude=r["longitude"],
+                label=r["place"]["display_name"],
+                source="photo",
+                confidence=r["confidence"],
+                resolution=r["resolution"],
+            )
+        )
+    rep = (row.investigation or {}).get("report") or {}
+    if rep.get("latitude") is not None and rep.get("longitude") is not None and rep.get("precision") in INVESTIGATION_RES:
+        options.append(
+            Location(
+                latitude=rep["latitude"],
+                longitude=rep["longitude"],
+                label=rep.get("place_name") or "Investigated location",
+                source="photo",
+                confidence=round(100 * float(rep.get("confidence", 0)), 1),
+                resolution=INVESTIGATION_RES[rep["precision"]],
+            )
+        )
+    return max(options, key=_strength, default=None)
 
 
 def _strength(loc: Location) -> tuple[int, float]:
@@ -107,8 +135,11 @@ def resolve(rows: list[Row]) -> dict[str, Location | None]:
 
 
 class ArchiveService:
-    def __init__(self, store: ArchiveStore, engine: Engine, people_policy: str, concurrency: int) -> None:
+    def __init__(
+        self, store: ArchiveStore, engine: Engine, people_policy: str, concurrency: int, investigate: bool = True
+    ) -> None:
         self.store = store
+        self.investigate = investigate
         self.engine = engine
         self.people_policy = people_policy
         self.concurrency = max(1, concurrency)
@@ -137,9 +168,20 @@ class ArchiveService:
             try:
                 result = await self.analyze(row)
                 await asyncio.to_thread(self.store.set_result, row.id, result.model_dump(mode="json"))
+                inv = self.engine.investigator
+                # Investigate only when the reasoning model is reachable (it produced the clue board).
+                if self.investigate and inv is not None and result.analysis is not None:
+                    img = await asyncio.to_thread(self._load_image, row.id)
+                    async for ev in inv.run(img, row.note or ""):
+                        if isinstance(ev, Investigation):
+                            await asyncio.to_thread(self.store.set_investigation, row.id, ev.model_dump(mode="json"))
             except Exception as e:
                 log.exception("archive analysis failed for %s", row.id)
                 await asyncio.to_thread(self.store.set_result, row.id, None, str(e)[:300] or "Analysis failed")
+
+    def _load_image(self, pid: str) -> Image.Image:
+        with Image.open(self.store.image_path(pid, "full")) as im:
+            return im.convert("RGB")
 
     async def analyze(self, row: Row) -> LocateResult:
         if row.gps:
@@ -174,6 +216,7 @@ class ArchiveService:
             **s.model_dump(),
             note=row.note,
             result=LocateResult.model_validate(row.result) if row.result else None,
+            investigation=Investigation.model_validate(row.investigation) if row.investigation else None,
         )
 
     def groups(self) -> list[Group]:

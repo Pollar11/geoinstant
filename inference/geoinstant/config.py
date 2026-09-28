@@ -58,6 +58,14 @@ class Settings(BaseSettings):
     vlm_deadline_ms: int = 12_000
     anthropic_api_key: str | None = Field(default=None, validation_alias="ANTHROPIC_API_KEY")
 
+    # --- Investigator (Claude agent with zoom, web search and map lookup) --------------------
+    investigator_mode: Literal["on", "off"] = "on"
+    investigator_model: str = "claude-opus-5"
+    investigator_effort: Literal["low", "medium", "high"] = "medium"
+    geocode_url: str = "https://nominatim.openstreetmap.org"  # OSM Nominatim (max 1 request/s)
+    geocode_user_agent: str = "GeoInstant/1.0 (private family photo archive)"
+    mapillary_token: str = ""  # free client token from mapillary.com/dashboard/developers → recent street photos
+
     # --- Privacy / abuse -------------------------------------------------------------------
     # City-level precision at most when people are the main subject.
     people_precision_policy: Literal["coarsen", "off"] = "coarsen"
@@ -82,6 +90,7 @@ class Settings(BaseSettings):
     archive_token: str = ""  # shared secret with the web app; empty = archive disabled
     archive_people_policy: Literal["coarsen", "off"] = "off"  # your own family photos: full precision
     archive_concurrency: int = 3
+    archive_investigate: bool = True  # run the investigator on every album photo (uses web search)
     archive_max_files_per_upload: int = 100
 
     # --- Feedback / continuous learning ----------------------------------------------------

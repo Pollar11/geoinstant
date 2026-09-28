@@ -63,6 +63,7 @@ class Row:
     note: str | None
     width: int
     height: int
+    investigation: dict[str, Any] | None = None
 
 
 class ArchiveStore:
@@ -75,6 +76,9 @@ class ArchiveStore:
         self._lock = threading.Lock()
         with self._lock:
             self._db.executescript(SCHEMA)
+            cols = {r[1] for r in self._db.execute("PRAGMA table_info(photos)")}
+            if "investigation" not in cols:  # added after the first release
+                self._db.execute("ALTER TABLE photos ADD COLUMN investigation TEXT")
             self._db.execute("UPDATE photos SET status='queued' WHERE status='analyzing'")  # resume after restart
             self._db.commit()
 
@@ -121,6 +125,7 @@ class ArchiveStore:
             note=r["note"],
             width=r["width"] or 0,
             height=r["height"] or 0,
+            investigation=json.loads(r["investigation"]) if r["investigation"] else None,
         )
 
     def get(self, pid: str) -> Row | None:
@@ -148,6 +153,11 @@ class ArchiveStore:
                 "UPDATE photos SET status=?, result=COALESCE(?, result), error=? WHERE id=?",
                 ("error" if error else "done", json.dumps(result) if result else None, error, pid),
             )
+            self._db.commit()
+
+    def set_investigation(self, pid: str, investigation: dict[str, Any]) -> None:
+        with self._lock:
+            self._db.execute("UPDATE photos SET investigation=? WHERE id=?", (json.dumps(investigation), pid))
             self._db.commit()
 
     def requeue(self, pid: str) -> None:

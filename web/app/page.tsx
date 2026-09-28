@@ -11,11 +11,12 @@ import { PhotoWithRegions } from "@/components/PhotoWithRegions";
 import { PipelineTimeline } from "@/components/PipelineTimeline";
 import { ResultPanel, ResultSkeleton } from "@/components/ResultPanel";
 import { ClueBoard } from "@/components/ClueBoard";
+import { InvestigationPanel } from "@/components/InvestigationPanel";
 import { SkylinePanel } from "@/components/SkylinePanel";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import type { BBox, SkylineResult } from "@/lib/api-types";
-import { sendFeedback, skylineSearch } from "@/lib/client";
+import type { BBox, Investigation, InvestigationStep, RegionBox, SkylineResult } from "@/lib/api-types";
+import { investigate, sendFeedback, skylineSearch } from "@/lib/client";
 import { useLocate } from "@/lib/use-locate";
 
 export default function Home() {
@@ -33,6 +34,40 @@ export default function Home() {
   const [skyError, setSkyError] = useState<string | null>(null);
   const [selected, setSelected] = useState(0);
 
+  // Investigator (Claude with zoom, web search and map lookup)
+  const [invSteps, setInvSteps] = useState<InvestigationStep[]>([]);
+  const [inv, setInv] = useState<Investigation | null>(null);
+  const [invRunning, setInvRunning] = useState(false);
+  const [invError, setInvError] = useState<string | null>(null);
+  const [invStarted, setInvStarted] = useState(false);
+
+  const runInvestigation = useCallback(
+    async (context: string) => {
+      if (!image) return;
+      setInvStarted(true);
+      setInvRunning(true);
+      setInvError(null);
+      setInvSteps([]);
+      setInv(null);
+      try {
+        for await (const ev of investigate(image.blob, context)) {
+          if (ev.type === "step") setInvSteps((s) => [...s, ev.step]);
+          else setInv(ev.investigation);
+        }
+      } catch (e) {
+        setInvError(e instanceof Error ? e.message : "Investigation failed");
+      } finally {
+        setInvRunning(false);
+      }
+    },
+    [image],
+  );
+
+  // Start automatically once the quick answer is in and the reasoning model is available.
+  useEffect(() => {
+    if (phase === "done" && result?.source === "visual" && result.analysis && !invStarted) void runInvestigation("");
+  }, [phase, result, invStarted, runInvestigation]);
+
   const start = useCallback(
     (f: File) => {
       setCorrecting(false);
@@ -42,6 +77,10 @@ export default function Home() {
       setTrace([]);
       setSky(null);
       setSkyError(null);
+      setInvStarted(false);
+      setInv(null);
+      setInvSteps([]);
+      setInvError(null);
       void run(f);
     },
     [run],
@@ -51,8 +90,26 @@ export default function Home() {
     () => (sky?.candidates ?? []).map((c) => ({ latitude: c.latitude, longitude: c.longitude, azimuth: c.azimuth_deg, fov: c.fov_deg })),
     [sky],
   );
+  const regions = useMemo<RegionBox[]>(
+    () => [
+      ...(result?.regions ?? []),
+      ...(inv?.steps ?? invSteps)
+        .filter((s) => s.kind === "zoom" && s.box)
+        .map((s) => ({ box: s.box!, label: s.text, score: 1, source: "zoom" })),
+    ],
+    [result, inv, invSteps],
+  );
+  const found = useMemo(() => {
+    const r = inv?.report;
+    return r && r.latitude != null && r.longitude != null && ["exact", "street", "neighborhood", "city"].includes(r.precision)
+      ? { latitude: r.latitude, longitude: r.longitude }
+      : null;
+  }, [inv]);
   const skylineLine = useMemo(() => sky?.profile.filter((p) => p[2] > 0).map((p) => [p[0], p[1]] as [number, number]), [sky]);
   const startOver = useCallback(() => {
+    setInvStarted(false);
+    setInv(null);
+    setInvSteps([]);
     setTracing(false);
     setTrace([]);
     setSky(null);
@@ -148,7 +205,7 @@ export default function Home() {
             {image && (
               <PhotoWithRegions
                 src={image.previewUrl}
-                regions={result?.regions ?? []}
+                regions={regions}
                 skyline={skylineLine}
                 trace={trace}
                 tracing={tracing}
@@ -189,6 +246,7 @@ export default function Home() {
                 views={views}
                 selectedView={selected}
                 heat={sky?.heat}
+                found={found}
               />
             </Card>
 
@@ -213,6 +271,15 @@ export default function Home() {
                   setCorrecting(false);
                   setNotice(m);
                 }}
+              />
+            )}
+            {(invStarted || (result?.source === "visual" && phase === "done")) && (
+              <InvestigationPanel
+                steps={invSteps}
+                investigation={inv}
+                running={invRunning}
+                error={invError}
+                onStart={(c) => void runInvestigation(c)}
               />
             )}
             {result ? <ResultPanel result={result} refining={refining} onVerdict={verdict} /> : !error && <ResultSkeleton />}

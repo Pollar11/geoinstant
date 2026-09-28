@@ -145,3 +145,31 @@ def test_skyline_endpoint(settings: Settings, tmp_path: Path) -> None:
         assert abs(best["latitude"] - TRUE[0]) < 0.01 and abs(best["longitude"] - TRUE[1]) < 0.015
         bad = c.post("/v1/skyline", files={"image": ("m.jpg", buf.getvalue(), "image/jpeg")}, data={"bbox": "[1,2]"})
         assert bad.status_code == 422
+
+
+def test_investigate_streams_steps_and_report(settings: Settings) -> None:
+    from geoinstant.models.investigator import Investigator
+
+    from .test_investigator import REPORT, FakeClient, block
+
+    app = create_app(settings)
+    with TestClient(app) as c:
+        client = FakeClient(
+            [[block("text", text="Looking at the sign."), block("tool_use", id="t", name="report_location", input=REPORT)]]
+        )
+        app.state.engine.investigator = Investigator(client, "claude-opus-5", "medium", "https://example.invalid", "test")
+        r = c.post(
+            "/v1/investigate",
+            files={"image": ("p.jpg", jpeg_bytes(synthetic_photo(9)), "image/jpeg")},
+            data={"context": "Greece"},
+        )
+        assert r.status_code == 200
+        events = [json.loads(line[5:]) for line in r.text.splitlines() if line.startswith("data:")]
+        assert events[0]["type"] == "step" and events[-1]["type"] == "report"
+        assert events[-1]["investigation"]["report"]["place_name"].startswith("Taverna Nikos")
+
+
+def test_nearby_without_token_gives_links(settings: Settings) -> None:
+    with client(settings) as c:
+        r = c.get("/v1/nearby", params={"lat": 36.46, "lon": 25.37, "heading": 90}).json()
+        assert r["images"] == [] and "heading=90" in r["street_view_url"] and "mapillary" in r["mapillary_url"]

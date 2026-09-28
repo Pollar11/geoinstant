@@ -157,3 +157,55 @@ export const SkylineResult = z.object({
   timings_ms: z.record(z.string(), z.number()),
 });
 export type SkylineResult = z.infer<typeof SkylineResult>;
+
+export const InvestigationStep = z.object({
+  kind: z.enum(["note", "zoom", "search", "geocode", "reverse", "error"]),
+  text: z.string(),
+  box: z.tuple([z.number(), z.number(), z.number(), z.number()]).nullable(),
+});
+export type InvestigationStep = z.infer<typeof InvestigationStep>;
+
+export const InvestigationReport = z.object({
+  latitude: z.number().nullable(),
+  longitude: z.number().nullable(),
+  precision: z.enum(["exact", "street", "neighborhood", "city", "region", "country", "unknown"]),
+  confidence: z.number(),
+  place_name: z.string(),
+  address: z.string(),
+  summary: z.string(),
+  evidence_chain: z.array(z.object({ clue: z.string(), conclusion: z.string() })),
+  people_are_main_subject: z.boolean().optional(),
+});
+export type InvestigationReport = z.infer<typeof InvestigationReport>;
+
+export const Investigation = z.object({
+  report: InvestigationReport.nullable(),
+  steps: z.array(InvestigationStep),
+  model: z.string(),
+  seconds: z.number(),
+});
+export type Investigation = z.infer<typeof Investigation>;
+
+export const InvestigateEvent = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("step"), step: InvestigationStep }),
+  z.object({ type: z.literal("report"), investigation: Investigation }),
+]);
+
+export const Nearby = z.object({
+  images: z.array(
+    z.object({
+      id: z.string(),
+      thumb_url: z.string(),
+      captured_at: z.string().nullable(),
+      latitude: z.number(),
+      longitude: z.number(),
+      compass_angle: z.number().nullable(),
+      distance_m: z.number(),
+    }),
+  ),
+  street_view_url: z.string(),
+  mapillary_url: z.string(),
+  satellite_url: z.string(),
+  note: z.string(),
+});
+export type Nearby = z.infer<typeof Nearby>;

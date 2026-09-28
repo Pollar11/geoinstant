@@ -27,6 +27,7 @@ from .gazetteer import Gazetteer, load_countries
 from .imageio import GpsFix, ImageError, decode, extract_gps
 from .models.detector import NullDetector, load_detector
 from .models.embedder import HashEmbedder, load_embedder
+from .models.investigator import load_investigator
 from .models.ocr import NullOcr, load_ocr
 from .models.vlm import VlmResult, load_vlm
 from .runtime import TtlLru, coarsen, people_are_main_subject
@@ -71,6 +72,14 @@ class Engine:
         self.detector = load_detector(s.artifact(s.detector), s.artifact(s.detector_classes), s.onnx_providers)
         self.ocr = load_ocr()
         self.vlm = load_vlm(s.vlm_mode, s.vlm_model, s.vlm_effort, s.anthropic_api_key)
+        self.investigator = load_investigator(
+            s.investigator_mode,
+            s.investigator_model,
+            s.investigator_effort,
+            s.anthropic_api_key,
+            s.geocode_url,
+            s.geocode_user_agent,
+        )
         self.cues = CueKnowledgeBase(s.cue_priors, countries)
         self.results: TtlLru[LocateResult] = TtlLru(s.result_cache_size, s.result_cache_ttl_s)
         self.embeddings: TtlLru[NDArray[np.float32]] = TtlLru(s.result_cache_size, s.result_cache_ttl_s)

@@ -20,6 +20,8 @@ from .archive.service import ArchiveService
 from .archive.store import ArchiveStore
 from .config import Settings, get_settings
 from .imageio import ImageError, decode
+from .models.investigator import Investigation
+from .nearby import Nearby, nearby
 from .pipeline import Engine
 from .runtime import FeedbackStore, TokenBucket
 from .schemas import (
@@ -56,7 +58,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.archive = None
     if settings.archive_token:
         app.state.archive = ArchiveService(
-            ArchiveStore(settings.archive_dir), app.state.engine, settings.archive_people_policy, settings.archive_concurrency
+            ArchiveStore(settings.archive_dir),
+            app.state.engine,
+            settings.archive_people_policy,
+            settings.archive_concurrency,
+            settings.archive_investigate,
         )
         app.state.archive.start()
     log.info("GeoInstant ready (mode=%s) %s", app.state.engine.mode, app.state.engine.models)
@@ -275,6 +281,51 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
 
         return await asyncio.get_running_loop().run_in_executor(engine.pool, work)
+
+    @app.post("/v1/investigate")
+    async def investigate(request: Request) -> StreamingResponse:
+        """Deep investigation (Claude + zoom + web search + map lookup), streamed as SSE steps."""
+        check(request, 5.0)
+        engine: Engine = request.app.state.engine
+        if engine.investigator is None:
+            raise HTTPException(503, "Investigator is off (set ANTHROPIC_API_KEY)")
+        form = await request.form(max_files=1, max_fields=3)
+        f = form.get("image")
+        if not isinstance(f, UploadFile):
+            raise HTTPException(400, "Expected a multipart field named 'image'")
+        data = await f.read()
+        if len(data) > settings.max_upload_bytes:
+            raise HTTPException(413, "Image is too large")
+        try:
+            img = (await asyncio.to_thread(decode, data, 2048, settings.max_pixels)).image
+        except ImageError as e:
+            raise HTTPException(e.status, str(e)) from e
+        context = str(form.get("context") or "")[:1000]
+        inv = engine.investigator
+
+        async def events() -> AsyncIterator[bytes]:
+            async for ev in inv.run(img, context):
+                if isinstance(ev, Investigation):
+                    if ev.report and settings.people_precision_policy == "coarsen":
+                        ev = ev.model_copy(update={"report": ev.report.coarsened()})
+                    payload = {"type": "report", "investigation": ev.model_dump(mode="json")}
+                else:
+                    payload = {"type": "step", "step": ev.model_dump(mode="json")}
+                yield f"data: {json.dumps(payload, separators=(',', ':'))}\n\n".encode()
+
+        return StreamingResponse(
+            events(), media_type="text/event-stream", headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"}
+        )
+
+    @app.get("/v1/nearby", response_model=Nearby, dependencies=[Depends(guard)])
+    async def nearby_photos(
+        lat: float = Query(ge=-90, le=90),
+        lon: float = Query(ge=-180, le=180),
+        radius_m: float = Query(300, ge=20, le=2000),
+        heading: float | None = Query(None, ge=0, le=360),
+    ) -> Nearby:
+        """Then & now: recent street-level photos around a spot."""
+        return await nearby(lat, lon, radius_m, settings.mapillary_token, heading)
 
     @app.get("/v1/skyline/coverage", response_model=SkylineCoverage)
     async def skyline_coverage(request: Request) -> SkylineCoverage:

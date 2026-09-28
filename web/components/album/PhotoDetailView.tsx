@@ -4,6 +4,7 @@ import { ArrowLeft, Check, MapPin, RefreshCw, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { ClueBoard } from "@/components/ClueBoard";
+import { InvestigationPanel, ThenAndNow } from "@/components/InvestigationPanel";
 import { PhotoWithRegions } from "@/components/PhotoWithRegions";
 import { ResultPanel } from "@/components/ResultPanel";
 import { Badge } from "@/components/ui/badge";
@@ -123,6 +124,26 @@ export function PhotoDetailView(p: Props) {
         </CardContent>
       </Card>
 
+      {(photo.investigation || photo.status === "done") && (
+        <InvestigationPanel
+          steps={[]}
+          investigation={photo.investigation ?? null}
+          running={photo.status === "queued" || photo.status === "analyzing"}
+          error={null}
+          defaultContext={photo.note ?? ""}
+          onStart={async (context) => {
+            await p.onPatch({ note: context });
+            p.onReanalyze();
+          }}
+        />
+      )}
+      {loc?.source === "you" && ["exact", "street"].includes(loc.resolution) && (
+        <Card>
+          <CardContent className="pt-4 text-sm">
+            <ThenAndNow lat={loc.latitude} lon={loc.longitude} />
+          </CardContent>
+        </Card>
+      )}
       {r?.analysis && <ClueBoard analysis={r.analysis} />}
       {p.skylinePanel}
       {r && r.source === "visual" && (

@@ -1,7 +1,7 @@
 /** Album (private archive) types and API calls; mirrors inference/geoinstant/archive. */
 import { z } from "zod";
 
-import { LocateResult } from "./api-types";
+import { Investigation, LocateResult } from "./api-types";
 import { ApiError } from "./client";
 import { readGps, downscale } from "./prepare-image";
 
@@ -32,7 +32,11 @@ export const PhotoSummary = z.object({
 });
 export type PhotoSummary = z.infer<typeof PhotoSummary>;
 
-export const PhotoDetail = PhotoSummary.extend({ note: z.string().nullable(), result: LocateResult.nullable() });
+export const PhotoDetail = PhotoSummary.extend({
+  note: z.string().nullable(),
+  result: LocateResult.nullable(),
+  investigation: Investigation.nullable().optional(),
+});
 export type PhotoDetail = z.infer<typeof PhotoDetail>;
 
 export const Group = z.object({ id: z.string(), name: z.string(), photo_ids: z.array(z.string()), location: Location.nullable() });

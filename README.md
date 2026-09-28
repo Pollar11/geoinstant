@@ -35,6 +35,18 @@ python scripts/build_index.py --manifest train.csv --faiss
 python scripts/evaluate.py --manifest test.csv
 ```
 
+## Investigation
+
+After the quick answer, Claude investigates like a GeoGuessr pro. It zooms into details, searches the web for any names or text it reads, and looks up addresses on OpenStreetMap. Then it reports:
+
+> **This photo was taken at** Taverna Nikos, Oia, Santorini · street level · 82%
+> *1. Greek menu with drachma prices → Greece before 2002 · 2. Awning "Taverna Nikos" → … · 3. Web search → Oia*
+
+**The place today** shows recent street photos of the spot (set `MAPILLARY_TOKEN`), plus Street View and satellite links.
+
+- **Exact spots** need something identifying: a name, a sign, text, a landmark, a distinctive view. Plain interiors usually stay at country or region level.
+- **Cost:** each investigation makes several Claude calls with web search.
+
 ## Family album
 
 The album lives at `/album` and is protected by a password. Drop in a whole folder and every photo gets:

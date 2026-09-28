@@ -35,7 +35,7 @@ export function PhotoWithRegions({ src, regions, skyline, trace, tracing = false
             {regions.map((r, i) => (
               <div
                 key={i}
-                className={cn("absolute rounded-sm border-2", r.source === "text" ? "border-amber-400" : "border-cyan-400")}
+                className={cn("absolute rounded-sm border-2", r.source === "text" ? "border-amber-400" : r.source === "zoom" ? "border-orange-500" : "border-cyan-400")}
                 style={{
                   left: `${r.box[0] * 100}%`,
                   top: `${r.box[1] * 100}%`,

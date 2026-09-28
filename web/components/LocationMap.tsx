@@ -23,6 +23,7 @@ type Props = {
   views?: View[]; // skyline candidates: camera position + viewing cone
   selectedView?: number;
   heat?: [number, number, number][]; // (lat, lon, score)
+  found?: { latitude: number; longitude: number } | null; // investigator's answer
 };
 
 /** Camera viewing cone as a polygon (8 km long). */
@@ -33,7 +34,18 @@ export function cone(v: View, km = 8): GeoJSON.Feature<GeoJSON.Polygon> {
   return { type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates: [ring] } };
 }
 
-export function LocationMap({ result, correcting, correction, onCorrect, onBounds, views = NO_VIEWS, selectedView = 0, heat = NO_HEAT }: Props) {
+export function LocationMap({
+  result,
+  correcting,
+  correction,
+  onCorrect,
+  onBounds,
+  views = NO_VIEWS,
+  selectedView = 0,
+  heat = NO_HEAT,
+  found = null,
+}: Props) {
+  const foundPin = useRef<Marker | null>(null);
   const el = useRef<HTMLDivElement>(null);
   const map = useRef<MlMap | null>(null);
   const pin = useRef<Marker | null>(null);
@@ -57,6 +69,7 @@ export function LocationMap({ result, correcting, correction, onCorrect, onBound
       m.addControl(new ml.NavigationControl({ showCompass: false }), "top-right");
       map.current = m;
       pin.current = new ml.Marker({ color: "#0e9fb5" });
+      foundPin.current = new ml.Marker({ color: "#f97316", scale: 1.2 });
       const fixMarker = new ml.Marker({ color: "#e0582f", draggable: true });
       fixMarker.on("dragend", () => {
         const p = fixMarker.getLngLat();
@@ -158,6 +171,22 @@ export function LocationMap({ result, correcting, correction, onCorrect, onBound
       if (v) m.flyTo({ center: [v.longitude, v.latitude], zoom: 11, speed: 1.6 });
     });
   }, [views, selectedView, heat]);
+
+  // Investigator's answer: orange pin, zoom to street level.
+  const fLat = found?.latitude;
+  const fLon = found?.longitude;
+  useEffect(() => {
+    void ready.current?.then(() => {
+      const m = map.current;
+      if (!m || !foundPin.current) return;
+      if (fLat == null || fLon == null) {
+        foundPin.current.remove();
+        return;
+      }
+      foundPin.current.setLngLat([fLon, fLat]).addTo(m);
+      m.flyTo({ center: [fLon, fLat], zoom: 16, speed: 1.4 });
+    });
+  }, [fLat, fLon]);
 
   // Correction pin.
   useEffect(() => {
