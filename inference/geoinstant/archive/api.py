@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 from starlette.datastructures import UploadFile
 
 from ..config import Settings
+from ..geocode import PlaceHit
 from ..imageio import GpsFix, ImageError, content_hash, extract_gps
 from ..streetmatch.service import Job, StreetMatchService
 from .service import ArchiveService, Group, PhotoDetail, PhotoSummary
@@ -170,6 +171,14 @@ def router(settings: Settings) -> APIRouter:
         if job is None:
             raise HTTPException(404, "No such search")
         return job
+
+    @r.get("/places", response_model=list[PlaceHit])
+    async def places(q: str, svc: Svc) -> list[PlaceHit]:
+        """Find a place by name, for pinning a photo when the phone has no GPS."""
+        q = q.strip()[:200]
+        if len(q) < 2 or svc.geocoder is None:
+            return []
+        return await svc.geocoder.search(q)
 
     @r.get("/groups", response_model=list[Group])
     async def groups(svc: Svc) -> list[Group]:

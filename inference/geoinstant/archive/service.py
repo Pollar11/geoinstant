@@ -10,6 +10,7 @@ from typing import Any, Literal
 from PIL import Image
 from pydantic import BaseModel
 
+from ..geocode import Nominatim
 from ..imageio import GpsFix
 from ..models.investigator import Investigation
 from ..pipeline import Engine
@@ -193,7 +194,9 @@ class ArchiveService:
         skyline: SkylineService | None = None,
         auto_street_km2: float = 25.0,
         auto_skyline_km: float = 20.0,
+        geocoder: Nominatim | None = None,
     ) -> None:
+        self.geocoder = geocoder
         self.store = store
         self.investigate = investigate
         self.streetmatch = streetmatch
@@ -289,7 +292,12 @@ class ArchiveService:
     async def analyze(self, row: Row) -> LocateResult:
         if row.gps:
             fix = GpsFix(**row.gps)
-            return self.engine.gps_result(uuid.uuid4().hex, fix, {"total": 0.0})
+            result = self.engine.gps_result(uuid.uuid4().hex, fix, {"total": 0.0})
+            # The offline place list only knows cities; an exact spot deserves its street address.
+            addr = await self.geocoder.address(fix.latitude, fix.longitude) if self.geocoder else None
+            if addr:
+                result = result.model_copy(update={"place": result.place.model_copy(update={"display_name": addr})})
+            return result
         data = await asyncio.to_thread(self.store.image_bytes, row.id)
         best: LocateResult | None = None
         async for ev in self.engine.locate(data, vlm_mode="blocking", people_policy=self.people_policy):
