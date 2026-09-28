@@ -17,6 +17,8 @@ services:
         sync: false
       - key: GEOINSTANT_MAPILLARY_TOKEN
         sync: false
+      - key: GEOINSTANT_SATELLITE_URL_TEMPLATE # optional: aerial views for checking candidates (see README)
+        sync: false
       - key: GEOINSTANT_GOOGLE_VISION_KEY # optional: reverse image search (finds cafés, hotels, bars from interiors)
         sync: false
       - key: GEOINSTANT_ARCHIVE_TOKEN

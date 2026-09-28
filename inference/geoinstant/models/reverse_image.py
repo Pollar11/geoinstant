@@ -85,25 +85,31 @@ class ReverseImage:
         }
 
     async def fetch_image(self, url: str) -> Image.Image:
-        """Download a candidate photo so the investigator can compare it. Public http(s) hosts only."""
-        for _ in range(4):  # follow up to 3 redirects, re-checking each hop
-            await self._resolve(url)
-            async with self.http.stream("GET", url, follow_redirects=False, headers={"User-Agent": "GeoInstant/1.0"}) as r:
-                if r.status_code in (301, 302, 303, 307, 308) and r.headers.get("location"):
-                    url = urljoin(url, r.headers["location"])
-                    continue
-                r.raise_for_status()
-                if not r.headers.get("content-type", "").startswith("image/"):
-                    raise ValueError("Not an image")
-                data = bytearray()
-                async for chunk in r.aiter_bytes():
-                    data.extend(chunk)
-                    if len(data) > MAX_IMAGE_BYTES:
-                        raise ValueError("Image too large")
-            img = Image.open(io.BytesIO(bytes(data)))
-            img.draft("RGB", (1600, 1600))
-            return img.convert("RGB")
-        raise ValueError("Too many redirects")
+        """Download a candidate photo so the investigator can compare it."""
+        return await fetch_public_image(self.http, url, self._resolve)
+
+
+async def fetch_public_image(http: httpx.AsyncClient, url: str, resolve: Any = None) -> Image.Image:
+    """Download an image from a public http(s) host (re-checked on every redirect), capped at 8 MB."""
+    check = resolve or _resolve_public
+    for _ in range(4):  # follow up to 3 redirects, re-checking each hop
+        await check(url)
+        async with http.stream("GET", url, follow_redirects=False, headers={"User-Agent": "GeoInstant/1.0"}) as r:
+            if r.status_code in (301, 302, 303, 307, 308) and r.headers.get("location"):
+                url = urljoin(url, r.headers["location"])
+                continue
+            r.raise_for_status()
+            if not r.headers.get("content-type", "").startswith("image/"):
+                raise ValueError("Not an image")
+            data = bytearray()
+            async for chunk in r.aiter_bytes():
+                data.extend(chunk)
+                if len(data) > MAX_IMAGE_BYTES:
+                    raise ValueError("Image too large")
+        img = Image.open(io.BytesIO(bytes(data)))
+        img.draft("RGB", (1600, 1600))
+        return img.convert("RGB")
+    raise ValueError("Too many redirects")
 
 
 async def _resolve_public(url: str) -> None:

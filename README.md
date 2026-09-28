@@ -86,6 +86,21 @@ Open the site and drop in a photo:
 
 When people are the main subject, the public page stays at city level and skips the exact search. The server only accepts a street search with a lead it signed for that exact photo.
 
+## Candidate research (the Rainbolt step)
+
+When the clues narrow a photo to a region (e.g. "an Orlando-area resort"), the investigation checks every candidate:
+1. **`find_places`** lists all matches in the area from OpenStreetMap (water slides, water parks, lighthouses, piers, churches, hotels…), with coordinates.
+2. **`view_satellite`** shows the aerial view of each candidate, to compare pool and slide shapes, roofs, roads and coastlines.
+3. **`street_photos`** shows real ground-level photos at the candidate (Mapillary).
+
+It pins a spot only when several independent details match. Otherwise it reports the region and what it checked.
+
+**Setup:**
+- `find_places` works without a key.
+- `street_photos` uses `GEOINSTANT_MAPILLARY_TOKEN`.
+- `view_satellite` needs `GEOINSTANT_SATELLITE_URL_TEMPLATE`, for example a Mapbox satellite static-image URL with your free Mapbox token:
+  `https://api.mapbox.com/styles/v1/mapbox/satellite-v9/static/{lon},{lat},{zoom},0/800x800?access_token=YOUR_TOKEN`
+
 ## Interiors: reverse image search
 
 Restrooms, bars, cafés and hotel rooms have no street to match, but venues have interior photos online. With `GEOINSTANT_GOOGLE_VISION_KEY` set, the investigation can:
