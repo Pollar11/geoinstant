@@ -64,6 +64,7 @@ class Settings(BaseSettings):
     investigator_effort: Literal["low", "medium", "high"] = "medium"
     geocode_url: str = "https://nominatim.openstreetmap.org"  # OSM Nominatim (max 1 request/s)
     geocode_user_agent: str = "GeoInstant/1.0 (private family photo archive)"
+    google_vision_key: str = ""  # reverse image search (Cloud Vision web detection): finds venues from interiors
     mapillary_token: str = ""  # free client token from mapillary.com/dashboard/developers → recent street photos
 
     # --- Privacy / abuse -------------------------------------------------------------------

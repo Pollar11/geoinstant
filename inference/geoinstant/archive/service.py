@@ -277,7 +277,7 @@ class ArchiveService:
                 # Investigate only when the reasoning model is reachable (it produced the clue board).
                 if self.investigate and inv is not None and result.analysis is not None:
                     img = await asyncio.to_thread(self.load_image, row.id)
-                    async for ev in inv.run(img, row.note or ""):
+                    async for ev in inv.run(img, row.note or "", self.people_policy):
                         if isinstance(ev, Investigation):
                             await asyncio.to_thread(self.store.set_investigation, row.id, ev.model_dump(mode="json"))
             except Exception as e:

@@ -14,10 +14,13 @@ import logging
 import time
 from collections.abc import AsyncIterator
 from typing import Any, Literal
+from urllib.parse import urlparse
 
 import httpx
 from PIL import Image
 from pydantic import BaseModel, Field, ValidationError
+
+from .reverse_image import ReverseImage
 
 log = logging.getLogger(__name__)
 
@@ -32,11 +35,16 @@ coastline, sun/shadows, vehicles, era.
 3. Use `web_search` to research what you read (business names, slogans, phone numbers, landmarks, \
 products and where they were sold) and to verify candidate places.
 4. Use `geocode` to get coordinates for a named place or address, and `reverse_geocode` to check a spot.
-5. Narrate briefly between steps (one or two sentences), like a pro explaining a round.
-6. Finish by calling `report_location` exactly once.
+5. Interiors and scenes without readable names (when `reverse_image_search` is available): search the whole \
+photo, then distinctive details (a lamp, tiles, wallpaper, a mural, a bar counter). Cafés, hotels, bars and \
+restaurants have interior photos on maps, review and booking sites. Open promising pages with `web_fetch` and \
+look at candidate photos with `view_image`; claim a venue only when several distinctive details match.
+6. Narrate briefly between steps (one or two sentences), like a pro explaining a round.
+7. Finish by calling `report_location` exactly once.
 
 Rules:
-- Never identify people, and never use faces or bodies as evidence.
+- Never identify people, and never use faces or bodies as evidence. Do not run `reverse_image_search` \
+when people are the main subject.
 - Be honest about precision. Indoors with nothing identifying, report country or region, not a \
 made-up address. Only claim "exact" or "street" when a specific place is identified and verified.
 - confidence = probability the true spot is within the stated precision."""
@@ -116,6 +124,36 @@ CLIENT_TOOLS: list[dict[str, Any]] = [
     REPORT_TOOL,
 ]
 
+REVERSE_TOOLS: list[dict[str, Any]] = [
+    {
+        "name": "reverse_image_search",
+        "description": "Find web pages and photos that match the photo (or a region of it): best-guess labels, "
+        "named entities, pages with matching images, visually similar images, landmarks with coordinates.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "x0": {"type": "number", "description": "optional region, fractions of width/height; omit for whole photo"},
+                "y0": {"type": "number"},
+                "x1": {"type": "number"},
+                "y1": {"type": "number"},
+                "why": {"type": "string"},
+                "people_are_main_subject": {"type": "boolean"},
+            },
+            "required": ["why", "people_are_main_subject"],
+        },
+    },
+    {
+        "name": "view_image",
+        "description": "Look at a candidate photo from a URL (e.g. from reverse_image_search or a fetched page) "
+        "to compare it with the photo being investigated.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"url": {"type": "string"}, "why": {"type": "string"}},
+            "required": ["url"],
+        },
+    },
+]
+
 
 class Evidence(BaseModel):
     clue: str
@@ -151,7 +189,7 @@ class Report(BaseModel):
 
 
 class Step(BaseModel):
-    kind: Literal["note", "zoom", "search", "geocode", "reverse", "error"]
+    kind: Literal["note", "zoom", "search", "geocode", "reverse", "image_search", "view", "error"]
     text: str
     box: tuple[float, float, float, float] | None = None
 
@@ -179,10 +217,12 @@ class Investigator:
         effort: str,
         geocode_url: str,
         user_agent: str,
-        max_steps: int = 14,
+        max_steps: int = 18,
         max_searches: int = 6,
-        budget_s: float = 150.0,
+        budget_s: float = 180.0,
+        reverse: ReverseImage | None = None,
     ) -> None:
+        self.reverse = reverse
         self.client = client
         self.model = model
         self.effort = effort
@@ -202,7 +242,9 @@ class Investigator:
         r.raise_for_status()
         return r.json()
 
-    async def _run_tool(self, name: str, args: dict[str, Any], img: Image.Image) -> tuple[list[dict[str, Any]], Step]:
+    async def _run_tool(
+        self, name: str, args: dict[str, Any], img: Image.Image, people_policy: str = "coarsen"
+    ) -> tuple[list[dict[str, Any]], Step]:
         if name == "zoom":
             x0, y0, x1, y1 = (float(min(max(args.get(k, d), 0.0), 1.0)) for k, d in (("x0", 0), ("y0", 0), ("x1", 1), ("y1", 1)))
             if x1 - x0 < 0.01 or y1 - y0 < 0.01:
@@ -229,10 +271,37 @@ class Investigator:
             r = await self._nominatim("reverse", {"lat": lat, "lon": lon})
             txt = r.get("display_name", "Nothing found") if isinstance(r, dict) else "Nothing found"
             return [{"type": "text", "text": txt}], Step(kind="reverse", text=f"Checked {lat:.4f}, {lon:.4f}")
+        if name == "reverse_image_search" and self.reverse is not None:
+            if args.get("people_are_main_subject") and people_policy == "coarsen":
+                return [{"type": "text", "text": "Not available when people are the main subject."}], Step(
+                    kind="error", text="Reverse image search skipped: people are the main subject"
+                )
+            region = img
+            if all(k in args for k in ("x0", "y0", "x1", "y1")):
+                x0, y0, x1, y1 = (float(min(max(args[k], 0.0), 1.0)) for k in ("x0", "y0", "x1", "y1"))
+                if x1 - x0 >= 0.05 and y1 - y0 >= 0.05:
+                    w, h = img.size
+                    region = img.crop((int(x0 * w), int(y0 * h), int(x1 * w), int(y1 * h)))
+            found = await self.reverse.search(region)
+            n = len(found["pages"]) + len(found["similar_images"]) + len(found["landmarks"])
+            return [{"type": "text", "text": json.dumps(found, ensure_ascii=False)}], Step(
+                kind="image_search", text=f"Reverse image search: {args.get('why') or 'whole photo'} ({n} leads)"
+            )
+        if name == "view_image" and self.reverse is not None:
+            url = str(args.get("url", ""))[:2000]
+            other = await self.reverse.fetch_image(url)
+            content = [
+                {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": _jpeg_b64(other, 1024)}}
+            ]
+            return content, Step(
+                kind="view", text=f"Compared with {urlparse(url).hostname or 'a photo'}: {args.get('why') or ''}".strip()
+            )
         return [{"type": "text", "text": f"Unknown tool {name}"}], Step(kind="error", text=f"Unknown tool {name}")
 
     # ---- loop -------------------------------------------------------------------------------
-    async def run(self, img: Image.Image, context: str = "") -> AsyncIterator[Step | Investigation]:
+    async def run(
+        self, img: Image.Image, context: str = "", people_policy: str = "coarsen"
+    ) -> AsyncIterator[Step | Investigation]:
         t0 = time.perf_counter()
         steps: list[Step] = []
         intro = "Where was this photo taken? Investigate and report."
@@ -247,7 +316,12 @@ class Investigator:
                 ],
             }
         ]
-        tools = [*CLIENT_TOOLS, {"type": "web_search_20260209", "name": "web_search", "max_uses": self.max_searches}]
+        tools = [
+            *CLIENT_TOOLS,
+            *(REVERSE_TOOLS if self.reverse else []),
+            {"type": "web_search_20260209", "name": "web_search", "max_uses": self.max_searches},
+            {"type": "web_fetch_20260209", "name": "web_fetch", "max_uses": 4},
+        ]
         report: Report | None = None
         nudged = False
         model = self.model
@@ -288,6 +362,8 @@ class Investigator:
                     yield emit(Step(kind="note", text=b.text.strip()[:600]))
                 elif b.type == "server_tool_use" and b.name == "web_search":
                     yield emit(Step(kind="search", text=f"Web search: {(b.input or {}).get('query', '')}"))
+                elif b.type == "server_tool_use" and b.name == "web_fetch":
+                    yield emit(Step(kind="search", text=f"Opened: {(b.input or {}).get('url', '')[:200]}"))
                 elif b.type == "tool_use":
                     if b.name == "report_location":
                         try:
@@ -297,7 +373,7 @@ class Investigator:
                         results.append({"type": "tool_result", "tool_use_id": b.id, "content": "Received."})
                         continue
                     try:
-                        content, step = await self._run_tool(b.name, dict(b.input or {}), img)
+                        content, step = await self._run_tool(b.name, dict(b.input or {}), img, people_policy)
                         results.append({"type": "tool_result", "tool_use_id": b.id, "content": content})
                     except Exception as e:  # noqa: BLE001
                         step = Step(kind="error", text=f"{b.name} failed")
@@ -327,7 +403,7 @@ class Investigator:
 
 
 def load_investigator(
-    mode: str, model: str, effort: str, api_key: str | None, geocode_url: str, user_agent: str
+    mode: str, model: str, effort: str, api_key: str | None, geocode_url: str, user_agent: str, vision_key: str = ""
 ) -> Investigator | None:
     if mode == "off":
         return None
@@ -338,4 +414,4 @@ def load_investigator(
     except Exception:  # noqa: BLE001
         log.warning("Investigator disabled: could not create the Anthropic client")
         return None
-    return Investigator(client, model, effort, geocode_url, user_agent)
+    return Investigator(client, model, effort, geocode_url, user_agent, reverse=ReverseImage(vision_key) if vision_key else None)

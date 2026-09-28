@@ -346,7 +346,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         inv = engine.investigator
 
         async def events() -> AsyncIterator[bytes]:
-            async for ev in inv.run(img, context):
+            async for ev in inv.run(img, context, settings.people_precision_policy):
                 if isinstance(ev, Investigation):
                     secret: bytes = request.app.state.lead_secret
                     lead = leads.issue(secret, data, ev.report, settings.auto_street_km2, settings.people_precision_policy)
